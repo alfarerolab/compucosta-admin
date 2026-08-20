@@ -1,0 +1,4 @@
+-- Baseline migration
+-- Este archivo representa el estado inicial de la base de datos
+-- importado desde dump.sql y sincronizado con prisma db push.
+-- Las tablas ya existen en la BD, esta migración se marca como aplicada.

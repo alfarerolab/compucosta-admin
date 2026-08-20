@@ -1,0 +1,78 @@
+{
+  "id": 5555000000005,
+  "order_number": 9005,
+  "name": "#9005",
+  "financial_status": "paid",
+  "fulfillment_status": null,
+  "gateway": "manual",
+  "total_price": "119000.00",
+  "subtotal_price": "100000.00",
+  "total_tax": "19000.00",
+  "currency": "COP",
+  "created_at": "2026-03-04T10:00:00-05:00",
+  "updated_at": "2026-03-04T10:00:00-05:00",
+  "customer": {
+    "id": 100001,
+    "email": "cliente.prueba@test.com",
+    "first_name": "LUIS FERNANDO",
+    "last_name": "PALACIO LOPEZ",
+    "phone": "+573001234567",
+    "default_address": {
+      "company": "1192779885",
+      "address1": "Calle 123 #45-67",
+      "city": "SINCELEJO",
+      "province": "Sucre",
+      "country": "CO",
+      "zip": "700001"
+    }
+  },
+  "shipping_address": {
+    "first_name": "LUIS FERNANDO",
+    "last_name": "PALACIO LOPEZ",
+    "company": "1192779885",
+    "address1": "Calle 123 #45-67",
+    "city": "SINCELEJO",
+    "province": "Sucre",
+    "country": "CO",
+    "zip": "700001",
+    "phone": "+573001234567"
+  },
+  "billing_address": {
+    "first_name": "LUIS FERNANDO",
+    "last_name": "PALACIO LOPEZ",
+    "company": "1192779885",
+    "address1": "Calle 123 #45-67",
+    "city": "SINCELEJO",
+    "province": "Sucre",
+    "country": "CO",
+    "zip": "700001"
+  },
+  "line_items": [
+    {
+      "id": 4130002,
+      "title": "Producto de Prueba",
+      "sku": "4130002",
+      "quantity": 1,
+      "price": "100000.00",
+      "total_discount": "0.00",
+      "tax_lines": [
+        {
+          "title": "IVA",
+          "price": "19000.00",
+          "rate": 0.19
+        }
+      ]
+    }
+  ],
+  "tax_lines": [
+    {
+      "title": "IVA",
+      "price": "19000.00",
+      "rate": 0.19
+    }
+  ],
+  "payment_gateway_names": ["manual"],
+  "note": null,
+  "note_attributes": [],
+  "source_name": "web"
+}

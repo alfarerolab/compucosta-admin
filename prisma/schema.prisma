@@ -1,0 +1,475 @@
+  generator client {
+    provider = "prisma-client-js"
+  }
+
+  datasource db {
+    provider     = "mysql"
+    url          = env("DATABASE_URL")
+    relationMode = "prisma"
+  }
+
+  enum BannerType {
+    bannerPrincipal
+    bannerSegundario
+    bannerContacto
+  }
+
+  model Banner {
+    id          Int         @id @default(autoincrement())
+    title       String 
+    imageUrl    String @db.Text
+    isActive    Boolean     @default(false)
+    bannerType  BannerType  
+    createdAt   DateTime    @default(now())
+    updatedAt   DateTime    @updatedAt
+
+    @@map("banner")
+  }
+
+  model Categoria {
+    id             Int        @id @default(autoincrement())
+    nombre         String
+    descripcion    String?
+    slug           String     @unique
+    imagen         String?
+    padre_id       Int?
+    id_externo     String?    // Para guardar el ID de la API externa
+    enlaceDestacado String?
+    activo          Boolean     @default(true)
+    
+    // Relaciones auto-referenciales con acciones correctas
+    padre          Categoria? @relation("CategoriaPadre", fields: [padre_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+    hijos          Categoria[] @relation("CategoriaPadre")
+    
+    // Relación con productos a través de tabla intermedia
+    productos      productocategoria[]
+    
+    @@map("categorias")
+  }
+
+  model marca {
+    id        Int       @id @default(autoincrement())  
+    idmarca   Int       @unique // Nuevo campo para almacenar el ID de la API externa
+    nombre    String
+    imagen    String?
+    productos productomarca[]
+  }
+
+  model color {
+    id        Int       @id @default(autoincrement())
+    nombre    String    @unique(map: "Color_nombre_key")
+    codigo_hex String   @unique(map: "Color_codigo_hex_key")
+    productos  productocolor[]
+  }
+
+  model imagenproducto {
+    id              Int      @id @default(autoincrement())
+    id_producto     String   
+    url             String
+    alt_text        String?
+    orden           Int       @default(0)
+    es_principal    Boolean   @default(false)
+    created_at      DateTime  @default(now())
+    
+    producto        producto  @relation(fields: [id_producto], references: [idproducto], onDelete: Cascade)
+    
+    @@index([id_producto], map: "ImagenProducto_id_producto_erp_idx")
+  }
+
+  model pedido {
+    id                    String   @id
+    id_pedido_erp         String   @unique(map: "Pedido_id_pedido_erp_key")
+    estado                String
+    total                 Decimal  @db.Decimal(10, 2)
+    fecha_pedido          DateTime
+    metadatos_adicionales String?  @db.LongText
+  }
+
+  model productopaquete {
+  id_producto Int
+  id_paquete  Int
+
+  producto    producto     @relation(fields: [id_producto], references: [id], onDelete: Cascade)
+  paquete     TipoPaquete  @relation(fields: [id_paquete], references: [id], onDelete: Cascade)
+
+  @@id([id_producto, id_paquete])
+  @@index([id_paquete], map: "ProductoPaquete_id_paquete_idx")
+  @@index([id_producto], map: "ProductoPaquete_id_producto_idx")
+}
+
+// Actualizar el modelo TipoPaquete para incluir la relación
+model TipoPaquete {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  altoCm    Int
+  anchoCm   Int
+  largoCm   Int
+  pesoKg    Float
+  createdAt DateTime @default(now())
+  
+  // Agregar esta línea
+  productos productopaquete[]
+}
+
+
+  model producto {
+    id                Int      @id @default(autoincrement())
+    idproducto        String   @unique
+    nombreproducto    String  
+    lista1            Decimal? @db.Decimal(10, 2)
+    lista2            Decimal? @db.Decimal(10, 2)
+    lista2_activa     Boolean  @default(false)  
+    porciva           Decimal? @db.Decimal(5, 2)
+    ivaincluido       String?  @db.Char(4)
+    descripcion       String?  @db.Text
+    caracteristica    String?  @db.Text
+    shopify_product_id  String?   @db.VarChar(255)
+    shopify_variant_id  String?   @db.VarChar(255)
+    shopify_synced_at   DateTime?
+    shopify_sync_hash   String?   @db.VarChar(32)
+    slug              String?  @unique
+    destacado         Boolean  @default(false)
+    cantidad          Int      @default(0)
+    
+    // ✅ Campos de texto para mostrar en la UI
+    categorias_texto  String?  @db.Text
+    colores_texto     String?  @db.VarChar(255)
+    marca_texto       String?  @db.VarChar(100)
+   
+    activo_manual     Boolean?
+    discontinuado     Boolean  @default(false)
+    activo            Boolean  @default(true)  
+    
+    // SYNC-01 — Fase 2: flag diferencial ERP → Shopify
+    needs_shopify_sync    Boolean   @default(false)
+    needs_shopify_sync_at DateTime?
+    
+    created_at        DateTime @default(now())
+    updated_at        DateTime @updatedAt
+
+    // Relaciones con Cascade
+    categorias        productocategoria[]
+    colores           productocolor[]
+    marca             productomarca[]
+    imagenes          imagenproducto[]
+    reviews           review[]  
+    orden_items       orden_item[]
+    paquetes          productopaquete[]
+
+    @@index([shopify_variant_id])
+    @@index([shopify_product_id])
+    @@index([activo])
+    @@index([activo_manual])
+    @@index([updated_at])
+    @@index([needs_shopify_sync])
+    @@index([categorias_texto(length: 255)])  
+}
+
+  model productocategoria {
+    id_producto      Int
+    id_categoria     Int
+
+    producto         producto  @relation(fields: [id_producto], references: [id], onDelete: Cascade)
+    categoria        Categoria @relation(fields: [id_categoria], references: [id], onDelete: Cascade)
+
+    @@id([id_producto, id_categoria])
+    @@index([id_categoria], map: "ProductoCategoria_id_categoria_idx")
+    @@index([id_producto], map: "ProductoCategoria_id_producto_erp_idx")
+  }
+
+  model productomarca {
+    id_producto Int
+    id_marca    Int
+
+    producto    producto @relation(fields: [id_producto], references: [id], onDelete: Cascade)
+    marca       marca    @relation(fields: [id_marca], references: [id], onDelete: Cascade)
+
+    @@id([id_producto, id_marca])
+    @@index([id_marca], map: "ProductoMarca_id_marca_idx")
+    @@index([id_producto], map: "ProductoMarca_id_producto_erp_idx")
+  }
+
+  model productocolor {
+    id_producto Int
+    id_color    Int
+
+    producto    producto @relation(fields: [id_producto], references: [id], onDelete: Cascade)
+    color       color    @relation(fields: [id_color], references: [id], onDelete: Cascade)
+
+    @@id([id_producto, id_color])
+    @@index([id_color], map: "ProductoColor_id_color_idx")
+    @@index([id_producto], map: "ProductoColor_id_producto_erp_idx")
+  }
+
+  model review {
+    id              Int      @id @default(autoincrement())
+    id_producto     Int
+    nombre_cliente  String
+    calificacion    Int      // Validar rango (1-5) desde el backend
+    comentario      String?  @db.Text
+    fecha_review    DateTime @default(now())
+    aprobado        Boolean  @default(false)
+    
+    producto        producto @relation(fields: [id_producto], references: [id], onDelete: Cascade)
+
+    @@index([id_producto], map: "Review_id_producto_erp_idx")
+  }
+
+  model Usuario {
+    id            String   @id @default(uuid()) // UID de Firebase
+    primerNombre  String
+    apellido      String
+    correo        String   @unique
+    direccion     Direccion? @relation(fields: [direccionId], references: [id])
+    direccionId   Int?    @unique // Campo único
+    created_at    DateTime @default(now())
+    updated_at    DateTime @updatedAt
+    chats         Chat[]  
+    @@map("usuarios")
+  }
+
+  model Direccion {
+    id          Int      @id @default(autoincrement())
+    calle       String
+    ciudad      String
+    pais        String
+    usuario     Usuario? @relation
+    usuarioId   String?  // Esto ahora se gestiona de manera opcional
+  }
+
+  model admin {
+    id        Int      @id @default(autoincrement())
+    usuario   String   @unique
+    contraseña String
+    rol       String 
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+
+    @@map("admin")
+  }
+
+  enum EstadoChat {
+    activo
+    cerrado
+  }
+
+  model Chat {
+    id              String    @id @default(uuid())
+    idUsuario       String?   // Puede ser nulo si el usuario no está registrado
+    nombreUsuario   String    // Nombre que proporciona el usuario
+    estado          EstadoChat @default(activo)
+    mensajes        Mensaje[]
+    ultimoMensaje   DateTime  @default(now())
+    ultimaActividad DateTime  @default(now()) // Nuevo campo
+    creado          DateTime  @default(now())
+    actualizado     DateTime  @updatedAt
+
+    // Relación opcional con un usuario registrado
+    usuario         Usuario?  @relation(fields: [idUsuario], references: [id])
+    
+    @@index([idUsuario])
+    @@index([estado])
+    
+    @@map("chat")
+  }
+
+  model Mensaje {
+    id              String    @id @default(uuid())
+    idChat          String
+    texto           String    @db.Text
+    esAdmin         Boolean   @default(false)
+    leido           Boolean   @default(false)
+    creado          DateTime  @default(now())
+    
+    // Relación con el chat
+    chat            Chat      @relation(fields: [idChat], references: [id], onDelete: Cascade)
+
+    @@index([idChat])
+    @@map("mensaje")
+  }
+
+  model Servicio {
+    id          String   @id @default(cuid())
+    titulo      String
+    descripcion String   @db.Text
+    imagenUrl   String   @db.Text
+    activo      Boolean  @default(true)
+    orden       Int      @default(0)
+    creadoEn    DateTime @default(now())
+    actualizadoEn DateTime @updatedAt
+
+    @@map("servicios")
+  }
+
+  model InformacionContacto {
+    id          String   @id @default(cuid())
+    tipo        String   // "sede", "personal", "general"
+    nombre      String
+    direccion   String?
+    telefono    String?
+    whatsapp    String?
+    email       String?
+    horario     String?
+    latitud     Float?
+    longitud    Float?
+    imagenUrl   String?
+    rol         String?  // Para personal: "Asesor Comercial", "Técnico Especializado"
+    sedeId      String?  // Relacionar personal con sede
+    activo      Boolean  @default(true)
+    orden       Int      @default(0)
+    creadoEn    DateTime @default(now())
+    actualizadoEn DateTime @updatedAt
+
+    @@map("informacion_contacto")
+  }
+
+  model InformacionEmpresa {
+    id          String   @id @default(cuid())
+    seccion     String   // "mision", "vision", "historia", "valores", "general"
+    tipo        String   // "texto", "hito", "valor"
+    titulo      String
+    descripcion String   @db.Text
+    icono       String?  // Para valores e hitos
+    orden       Int      @default(0)
+    activo      Boolean  @default(true)
+    metadatos   Json?    // Para información adicional (año para hitos, etc.)
+    creadoEn    DateTime @default(now())
+    actualizadoEn DateTime @updatedAt
+
+    @@map("informacion_empresa")
+  }
+
+  model orden {
+  id                    Int       @id @default(autoincrement())
+  id_orden              String    @unique @db.VarChar(100)
+  shopify_order_id      String?   @unique @db.VarChar(100)
+  shopify_order_number  Int?
+  
+  // Cliente
+  customer_email        String    @db.VarChar(255)
+  customer_name         String    @db.VarChar(255)
+  customer_phone        String?   @db.VarChar(50)
+  
+  // Dirección de envío
+  shipping_address      Json?
+  billing_address       Json?
+  
+  // Totales
+  subtotal              Decimal   @db.Decimal(10, 2)
+  tax                   Decimal   @db.Decimal(10, 2)
+  shipping_cost         Decimal   @db.Decimal(10, 2)
+  total                 Decimal   @db.Decimal(10, 2)
+  
+  // Estado
+  status                String    @db.VarChar(50) // pending, processing, completed, cancelled, refunded
+  payment_status        String    @db.VarChar(50) // pending, paid, refunded
+  fulfillment_status    String?   @db.VarChar(50) // unfulfilled, partial, fulfilled
+  
+  // Metadatos
+  currency              String    @default("COP") @db.VarChar(10)
+  payment_method        Int?      
+  payment_gateway        String?  @db.Text
+  notes                 String?   @db.Text
+
+  //  ERP y Facturación Electrónica
+  erp_synced            Boolean   @default(false)
+  erp_doc_ref           String?   @db.VarChar(50)  // Ej: "FEG-12345"
+  erp_sync_error        String?   @db.Text
+  erp_nit_cliente       BigInt?  
+  facturacion_pendiente Boolean   @default(false)  
+  razon_pendiente       String?   @db.Text        
+  // F1.1 / F1.2: Estado de facturación (queued | billed | error)
+  billing_status        String?   @db.VarChar(50)
+  erp_numero            Int?      // Número de factura en el ERP (persistido antes del POST)
+  
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+  completed_at          DateTime?
+  cancelled_at          DateTime?
+  
+  // Relaciones
+  items                 orden_item[]
+  
+  @@index([shopify_order_id])
+  @@index([customer_email])
+  @@index([erp_synced])
+  @@index([status])
+  @@index([created_at])
+}
+
+  model orden_item {
+    id                    Int       @id @default(autoincrement())
+    id_orden              Int
+    id_producto           Int
+    
+    // Datos del producto (snapshot al momento de la venta)
+    product_name          String    @db.VarChar(255)
+    product_sku           String    @db.VarChar(100)
+    shopify_variant_id    String?   @db.VarChar(255)
+    
+    // Cantidades y precios
+    quantity              Int
+    unit_price            Decimal   @db.Decimal(10, 2)
+    subtotal              Decimal   @db.Decimal(10, 2)
+    tax                   Decimal   @db.Decimal(10, 2)
+    total                 Decimal   @db.Decimal(10, 2)
+    
+    // Stock descontado
+    stock_decreased       Boolean   @default(false)
+    erp_synced            Boolean   @default(false)
+    erp_doc_ref           String?   @db.VarChar(50)
+    
+    // Timestamps
+    created_at            DateTime  @default(now())
+    
+    // Relaciones
+    orden                 orden     @relation(fields: [id_orden], references: [id], onDelete: Cascade)
+    producto              producto  @relation(fields: [id_producto], references: [id], onDelete: Restrict)
+    
+    
+    // BD-02: unicidad por orden + variante para prevenir ítems duplicados en reintentos
+    @@unique([id_orden, shopify_variant_id])
+    @@index([id_orden])
+    @@index([id_producto])
+  }
+
+  model consecutivo_factura {
+    id            Int      @id @default(autoincrement())
+    ultimo_numero Int      @default(0)
+    prefijo       String?  @db.VarChar(10)
+    created_at    DateTime @default(now())
+    updated_at    DateTime @updatedAt
+    
+    @@map("consecutivo_factura")
+  }
+  model cliente {
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique @db.VarChar(255)
+  nombre                String    @db.VarChar(255)
+  telefono              String?   @db.VarChar(50)
+  shopify_customer_id   String?   @unique @db.VarChar(100)
+  
+  // ⭐ CAMPOS PARA ERP:
+  erp_nit               BigInt?      @unique
+  direccion             String?   @db.VarChar(255)
+  ciudad                String?   @db.VarChar(100)
+  departamento          String?   @db.VarChar(100)
+  pais                  String?   @db.VarChar(100)
+  
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @updatedAt
+  
+  @@index([email])
+  @@index([shopify_customer_id])
+  @@index([erp_nit])
+  
+  @@map("clientes")
+}
+
+model webhook_events {
+  id          Int      @id @default(autoincrement())
+  event_id    String   @unique
+  delivery_id String?
+  topic       String?
+  received_at DateTime @default(now())
+}
