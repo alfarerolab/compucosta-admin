@@ -9,7 +9,9 @@ export async function GET() {
         hijos: {
           orderBy: { nombre: 'asc' }
         },
-        padre: true
+        padre: true,
+        // Conteos para el panel (campo adicional; no altera lo que consume la tienda)
+        _count: { select: { productos: true, hijos: true } }
       },
       orderBy: [
         { padre_id: 'asc' },

@@ -1,6 +1,5 @@
 "use client";
 
-import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +18,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Trash, RefreshCw, CheckCircle, Search, Filter, X, Zap, ShoppingBag, Clock, Sparkles, Square } from "lucide-react";
+import { Pencil, RefreshCw, Search, X, Zap, ShoppingBag, Clock, Sparkles, Square, Loader2, UploadCloud, ChevronDown, SlidersHorizontal, MoreHorizontal, Eye, EyeOff, ImageOff, Image as ImageIcon, ListChecks, FileText, PackageSearch } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { FilterCombobox, type ComboOption } from "@/components/shared/filter-combobox";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Pagination from "@/components/ui/pagination";
@@ -119,6 +127,7 @@ export default function ProductosPageContent() {
   const [aiStatus, setAiStatus] = useState<{ configurado: boolean; pendientes: number } | null>(null);
   const [aiRunning, setAiRunning] = useState(false);
   const aiCancelRef = useRef(false);
+  const [toggleTarget, setToggleTarget] = useState<Producto | null>(null);
 
   // Paginación del servidor
   const [page, setPage]                   = useState(Math.max(1, parseInt(searchParams.get('page') || '1')));
@@ -457,13 +466,13 @@ Se guardarán y quedarán listos para sincronizar con Shopify. Puedes revisarlos
       params.set('limit', itemsPerPage.toString());
       if (debouncedSearch)               params.set('search',      debouncedSearch);
       if (filtros.estado !== 'todos')    params.set('estado',      filtros.estado);
-      if (filtros.categoria !== 'todos') params.set('categoria',   filtros.categoria);
+      if (filtros.categoria !== 'todos') { params.set('categoria', filtros.categoria); params.set('incluirSub', '1'); }
       if (filtros.marca !== 'todos')     params.set('marca',       filtros.marca);
       if (filtros.precioMin)             params.set('precioMin',   filtros.precioMin);
       if (filtros.precioMax)             params.set('precioMax',   filtros.precioMax);
       if (filtros.cantidadMin)           params.set('cantidadMin', filtros.cantidadMin);
       if (filtros.cantidadMax)           params.set('cantidadMax', filtros.cantidadMax);
-      if (filtroVisibilidad !== 'todos') params.set('visibilidad', filtroVisibilidad);
+      params.set('visibilidad', filtroVisibilidad); // "todos" explícito: el panel ve también los ocultos
 
       const headers: Record<string, string> = noCache
         ? { 'Cache-Control': 'no-cache' }
@@ -507,21 +516,6 @@ Se guardarán y quedarán listos para sincronizar con Shopify. Puedes revisarlos
     }
 
     const accion = producto.activo ? "ocultar" : "mostrar";
-    const esControlManual = producto.activo_manual !== null;
-
-    const mensaje = producto.activo
-      ? `🔒 ¿Ocultar "${producto.nombreproducto}"?\n\n` +
-        `⚠️ IMPORTANTE:\n` +
-        `• El producto NO será eliminado\n` +
-        `• Se ocultará del ecommerce\n` +
-        `• La sincronización RESPETARÁ esta decisión\n` +
-        `• Puedes reactivarlo cuando quieras\n\n` +
-        `${esControlManual ? '📌 Este producto está bajo control manual' : '🤖 Actualmente controlado automáticamente'}`
-      : `👁️ ¿Mostrar "${producto.nombreproducto}"?\n\n` +
-        `✅ El producto será visible en el ecommerce\n` +
-        `📌 Quedará bajo control manual (la sincronización respetará tu decisión)`;
-
-    if (!confirm(mensaje)) return;
 
     try {
       const response = await fetch(`/api/products/${idproducto}`, {
@@ -555,8 +549,8 @@ Se guardarán y quedarán listos para sincronizar con Shopify. Puedes revisarlos
       );
 
       const descripcion = data.activo
-        ? "✅ Visible en ecommerce | 📌 Control manual activado"
-        : "🔒 Oculto del ecommerce | 📌 Control manual activado\n⚠️ La sincronización respetará esta decisión";
+        ? "Visible en la tienda · control manual activado"
+        : "Oculto de la tienda · la sincronización respetará esta decisión";
 
       toast.success(data.message, {
         description: descripcion,
@@ -646,545 +640,478 @@ Se guardarán y quedarán listos para sincronizar con Shopify. Puedes revisarlos
   };
 
 
-  // Solo mostrar pantalla completa en la primera carga, nunca en recargas
-  if (isInitialLoad && loading) {
-    return (
-      <div className="flex flex-col justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <div className="text-lg font-medium">Cargando productos...</div>
-        <div className="text-sm text-gray-500 mt-2">Esto puede tomar unos segundos</div>
-      </div>
-    );
-  }
+  const categoryOptions: ComboOption[] = useMemo(
+    () =>
+      filterOptions.categorias.map((o) => {
+        const [parent, child] = o.value.split(" → ");
+        return child ? { value: o.value, label: child, parent } : { value: o.value, label: o.value };
+      }),
+    [filterOptions.categorias]
+  );
+  const brandOptions: ComboOption[] = useMemo(
+    () => filterOptions.marcas.map((o) => ({ value: o.value, label: o.label })),
+    [filterOptions.marcas]
+  );
+
+  const formatCOP = (v?: number) =>
+    v === undefined || v === null
+      ? "—"
+      : new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(Number(v));
+
+  const estadoLabel: Record<string, string> = { Completo: "Completos", Incompleto: "Incompletos", "Sin completar": "Sin completar" };
+  const chips: Array<{ key: string; label: string; clear: () => void }> = [
+    filtros.categoria !== "todos" && { key: "cat", label: `Categoría: ${filtros.categoria === "sin_categoria" ? "Sin categoría" : filtros.categoria}`, clear: () => handleFiltroChange("categoria", "todos") },
+    filtros.marca !== "todos" && { key: "marca", label: `Marca: ${filtros.marca === "sin_marca" ? "Sin marca" : filtros.marca}`, clear: () => handleFiltroChange("marca", "todos") },
+    filtros.estado !== "todos" && { key: "estado", label: `Contenido: ${estadoLabel[filtros.estado] ?? filtros.estado}`, clear: () => handleFiltroChange("estado", "todos") },
+    filtroVisibilidad !== "todos" && { key: "vis", label: filtroVisibilidad === "visibles" ? "Solo visibles" : "Solo ocultos", clear: () => { setFiltroVisibilidad("todos"); setPage(1); } },
+    (filtros.precioMin || filtros.precioMax) && {
+      key: "precio",
+      label: `Precio: ${filtros.precioMin ? formatCOP(Number(filtros.precioMin)) : "$0"} – ${filtros.precioMax ? formatCOP(Number(filtros.precioMax)) : "∞"}`,
+      clear: () => { setPrecioMinDisplay(""); setPrecioMaxDisplay(""); setFiltros((f) => ({ ...f, precioMin: "", precioMax: "" })); setPage(1); },
+    },
+    (filtros.cantidadMin || filtros.cantidadMax) && {
+      key: "stock",
+      label: `Stock: ${filtros.cantidadMin || 0} – ${filtros.cantidadMax || "∞"}`,
+      clear: () => { setFiltros((f) => ({ ...f, cantidadMin: "", cantidadMax: "" })); setPage(1); },
+    },
+  ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
+  const rangeFiltersActive = !!(filtros.precioMin || filtros.precioMax || filtros.cantidadMin || filtros.cantidadMax);
+
+  const showSkeleton = isInitialLoad && loading;
 
 return (
-  <div className="space-y-4 sm:space-y-6">
-    {/* Header */}
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-      <div className="flex-1">
-        <PageTitle
-          title="Productos"
-          icon={ShoppingBag}
-          description={
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span><span className="font-medium text-foreground tabular">{productos.length}</span> de <span className="tabular">{totalServerItems}</span> productos</span>
-              {lastSync && (
-                <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Sync {lastSync.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</span>
-              )}
-              {shopifyStats && (
-                <span className="inline-flex items-center gap-1">
-                  <ShoppingBag className="h-3.5 w-3.5" />
-                  Shopify <span className="tabular">{shopifyStats.sincronizados}/{shopifyStats.total}</span>
-                  {shopifyStats.necesitan_actualizacion > 0 && (
-                    <span className="text-amber-700">· {shopifyStats.necesitan_actualizacion} pendientes</span>
-                  )}
-                </span>
+  <div className="space-y-5">
+    <PageHeader
+      title="Productos"
+      icon={ShoppingBag}
+      description={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span><span className="font-medium text-foreground tabular">{new Intl.NumberFormat("es-CO").format(totalServerItems)}</span> productos</span>
+          {shopifyStats && (
+            <span className="inline-flex items-center gap-1">
+              <ShoppingBag className="h-3.5 w-3.5" />
+              Shopify <span className="tabular">{shopifyStats.sincronizados}/{shopifyStats.total}</span>
+              {shopifyStats.necesitan_actualizacion > 0 && (
+                <span className="text-amber-700">· {shopifyStats.necesitan_actualizacion} pendientes</span>
               )}
             </span>
-          }
-        />
-      </div>
-
-      {/* Búsqueda Principal (Siempre visible) */}
-      <div className="flex-1 w-full max-w-md">
-        <div className="relative">
-          {isSearching ? (
-            <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-              <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : (
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           )}
-          <Input
-            ref={searchInputRef}
-            placeholder="Buscar por nombre, nombre comercial o ID..."
-            value={searchInput}
-            onChange={(e) => handleBusquedaChange(e.target.value)}
-            className="pl-10 pr-10 bg-white"
-          />
-          {searchInput && (
-            <button
-              onClick={() => {
-                handleBusquedaChange('');
-                searchInputRef.current?.focus();
-              }}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          {lastSync && (
+            <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {lastSync.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}</span>
           )}
-        </div>
-      </div>
-
-      {/* Botones de acción */}
-      <div className="flex flex-wrap gap-2">
-        {/* Filtros */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <Filter className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Filtros</span>
-        </Button>
-
-        {/* Agente IA: nombres comerciales */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleGenerarNombresIA}
-          disabled={!aiStatus}
-          className={aiRunning ? "border-primary text-primary" : "border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"}
-          title={aiStatus?.configurado ? "Generar nombres comerciales con IA para los productos que no tienen" : "Configura DEEPSEEK_API_KEY para activar el agente IA"}
-        >
-          {aiRunning ? <Square className="h-3.5 w-3.5 sm:mr-2 fill-current" /> : <Sparkles className="h-4 w-4 sm:mr-2" />}
-          <span className="hidden sm:inline">{aiRunning ? 'Detener' : 'Nombres IA'}</span>
-          {!aiRunning && !!aiStatus?.pendientes && (
-            <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold tabular">
-              {aiStatus.pendientes > 999 ? '999+' : aiStatus.pendientes}
-            </span>
-          )}
-        </Button>
-
-        {/* Shopify Sync */}
-        <div className="flex items-center gap-1">
+        </span>
+      }
+      actions={
+        <>
+          <Button variant="outline" onClick={() => loadProductos(true)} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading && !isInitialLoad ? "animate-spin" : ""}`} />
+            Actualizar
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={shopifySyncing}>
+                {shopifySyncing ? <Zap className="mr-2 h-4 w-4 animate-pulse" /> : <UploadCloud className="mr-2 h-4 w-4" />}
+                {shopifySyncing ? "Sincronizando..." : "Publicar en Shopify"}
+                <ChevronDown className="ml-2 h-4 w-4 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem onSelect={() => handleShopifySync(false)}>
+                <UploadCloud className="mr-2 h-4 w-4" />
+                <div>
+                  <p>Publicar cambios</p>
+                  <p className="text-xs text-muted-foreground">Solo productos modificados</p>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => handleShopifySync(true)}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                <div>
+                  <p>Sincronización completa</p>
+                  <p className="text-xs text-muted-foreground">Todos los productos activos (lento)</p>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
-            size="sm"
-            onClick={() => handleShopifySync(false)}
-            disabled={shopifySyncing}
-            className="border-purple-500 text-purple-600 hover:bg-purple-50"
-            title="Sincronizar productos modificados"
+            onClick={handleGenerarNombresIA}
+            disabled={!aiStatus}
+            className={aiRunning ? "border-primary text-primary" : "border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"}
+            title={aiStatus?.configurado ? "Generar nombres comerciales con IA para los productos que no tienen" : "Configura DEEPSEEK_API_KEY para activar el agente IA"}
           >
-            {shopifySyncing ? (
-              <Zap className="h-4 w-4 animate-pulse sm:mr-2" />
-            ) : (
-              <ShoppingBag className="h-4 w-4 sm:mr-2" />
+            {aiRunning ? <Square className="mr-2 h-3.5 w-3.5 fill-current" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            {aiRunning ? "Detener IA" : "Nombres IA"}
+            {!aiRunning && !!aiStatus?.pendientes && (
+              <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold tabular">
+                {aiStatus.pendientes > 999 ? "999+" : aiStatus.pendientes}
+              </span>
             )}
-            <span className="hidden sm:inline">{shopifySyncing ? 'Sync...' : 'Shopify'}</span>
           </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => handleShopifySync(true)}
-            disabled={shopifySyncing}
-            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 px-2"
-            title="Forzar sincronización completa"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
 
     {shopifySyncing && (
-      <div className="bg-purple-50 border-l-4 border-purple-400 p-3 rounded">
-        <div className="flex items-start gap-2">
-          <Zap className="h-4 w-4 animate-pulse text-purple-500 mt-0.5 flex-shrink-0" />
-          <span className="text-sm text-purple-700">
-            Sincronizando con Shopify... Puede tomar varios minutos.
-          </span>
-        </div>
+      <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800">
+        <Zap className="h-4 w-4 shrink-0 animate-pulse" />
+        Publicando en Shopify… puede tardar varios minutos. Puedes seguir trabajando.
       </div>
     )}
 
-    {/* Panel de Filtros */}
-    {showFilters && (
-      <div className="bg-gray-50 border rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium">Filtros</h3>
-            {/* Badge de filtros activos */}
-            {(() => {
-              const activos = [
-                filtros.estado !== 'todos',
-                filtros.categoria !== 'todos',
-                filtros.marca !== 'todos',
-                !!filtros.precioMin,
-                !!filtros.precioMax,
-                !!filtros.cantidadMin,
-                !!filtros.cantidadMax,
-                filtroVisibilidad !== 'todos'
-              ].filter(Boolean).length;
-              return activos > 0 ? (
-                <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                  {activos} activo{activos > 1 ? 's' : ''}
-                </span>
-              ) : null;
-            })()}
+    <Card className="overflow-hidden">
+      {/* Barra de filtros: siempre visible */}
+      <div className="space-y-3 border-b p-3 sm:p-4">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <div className="relative flex-1">
+            {isSearching ? (
+              <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+            ) : (
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            )}
+            <Input
+              ref={searchInputRef}
+              placeholder="Buscar por nombre, nombre comercial o código..."
+              value={searchInput}
+              onChange={(e) => handleBusquedaChange(e.target.value)}
+              className="h-9 pl-9 pr-9"
+            />
+            {searchInput && (
+              <button
+                onClick={() => { handleBusquedaChange(""); searchInputRef.current?.focus(); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                aria-label="Limpiar búsqueda"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowFilters(false)}
-            className="text-gray-400 hover:text-gray-600 px-2"
-            title="Cerrar filtros"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {/* Estado */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Estado</label>
-            <Select
-              value={filtros.estado}
-              onValueChange={(value) => handleFiltroChange('estado', value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
+          <div className="flex flex-wrap items-center gap-2">
+            <FilterCombobox
+              label="Categoría"
+              value={filtros.categoria}
+              onChange={(v) => handleFiltroChange("categoria", v)}
+              options={categoryOptions}
+              extraOptions={[{ value: "sin_categoria", label: "Sin categoría" }]}
+              placeholder="Buscar categoría..."
+              className="max-w-[240px]"
+            />
+            <FilterCombobox
+              label="Marca"
+              value={filtros.marca}
+              onChange={(v) => handleFiltroChange("marca", v)}
+              options={brandOptions}
+              extraOptions={[{ value: "sin_marca", label: "Sin marca" }]}
+              placeholder="Buscar marca..."
+              className="max-w-[200px]"
+            />
+            <Select value={filtros.estado} onValueChange={(v) => handleFiltroChange("estado", v)}>
+              <SelectTrigger className={`h-9 w-auto gap-1.5 ${filtros.estado !== "todos" ? "border-primary/40 bg-primary/[0.05]" : "bg-card"}`}>
+                <span className="text-muted-foreground">Contenido:</span>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="Completo">Completo</SelectItem>
-                <SelectItem value="Incompleto">Incompleto</SelectItem>
+                <SelectItem value="Completo">Completos</SelectItem>
+                <SelectItem value="Incompleto">Incompletos</SelectItem>
                 <SelectItem value="Sin completar">Sin completar</SelectItem>
               </SelectContent>
             </Select>
-          </div>
 
-          {/* Categoría */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Categoría</label>
-            <Select
-              value={filtros.categoria}
-              onValueChange={(value) => handleFiltroChange('categoria', value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                <SelectItem value="sin_categoria">🚫 Sin categoría</SelectItem>
-                {filterOptions.categorias.map((opt, i) => (
-                  <SelectItem key={`${opt.value}-${i}`} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className={`h-9 ${rangeFiltersActive ? "border-primary/40 bg-primary/[0.05]" : ""}`}>
+                  <SlidersHorizontal className="mr-2 h-4 w-4" />
+                  Precio y stock
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[300px] space-y-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Precio (COP)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                      <Input inputMode="numeric" placeholder="Mínimo" value={precioMinDisplay} className="h-9 pl-6"
+                        onChange={(e) => { const raw = parsePeso(e.target.value); setPrecioMinDisplay(formatPeso(raw)); handleNumericFiltroChange("precioMin", raw); }} />
+                    </div>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                      <Input inputMode="numeric" placeholder="Máximo" value={precioMaxDisplay} className="h-9 pl-6"
+                        onChange={(e) => { const raw = parsePeso(e.target.value); setPrecioMaxDisplay(formatPeso(raw)); handleNumericFiltroChange("precioMax", raw); }} />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Stock (unidades)</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input type="number" min={0} placeholder="Mínimo" value={filtros.cantidadMin} className="h-9"
+                      onChange={(e) => handleNumericFiltroChange("cantidadMin", e.target.value)} />
+                    <Input type="number" min={0} placeholder="Máximo" value={filtros.cantidadMax} className="h-9"
+                      onChange={(e) => handleNumericFiltroChange("cantidadMax", e.target.value)} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {[
+                      { label: "Agotados", min: "", max: "0" },
+                      { label: "Stock bajo (1–5)", min: "1", max: "5" },
+                      { label: "Con stock", min: "1", max: "" },
+                    ].map((p) => (
+                      <button key={p.label} className="rounded-full border px-2.5 py-1 text-xs hover:bg-accent"
+                        onClick={() => { setFiltros((f) => ({ ...f, cantidadMin: p.min, cantidadMax: p.max })); setPage(1); }}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
 
-          {/* Marca */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Marca</label>
-            <Select
-              value={filtros.marca}
-              onValueChange={(value) => handleFiltroChange('marca', value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
-                <SelectItem value="sin_marca">🚫 Sin marca</SelectItem>
-                {filterOptions.marcas.map((opt, i) => (
-                  <SelectItem key={`${opt.value}-${i}`} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Precio Mín */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Precio Mín</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">$</span>
-              <Input
-                type="text"
-                inputMode="numeric"
-                placeholder="0"
-                value={precioMinDisplay}
-                onChange={(e) => {
-                  const raw = parsePeso(e.target.value);
-                  const formatted = formatPeso(raw);
-                  setPrecioMinDisplay(formatted);
-                  handleNumericFiltroChange('precioMin', raw);
-                }}
-                className="pl-7"
-              />
+            <div className="inline-flex h-9 rounded-md border bg-muted/40 p-0.5" role="radiogroup" aria-label="Visibilidad">
+              {([["todos", "Todos"], ["visibles", "Visibles"], ["ocultos", "Ocultos"]] as const).map(([v, l]) => (
+                <button
+                  key={v}
+                  role="radio"
+                  aria-checked={filtroVisibilidad === v}
+                  onClick={() => { setFiltroVisibilidad(v); setPage(1); }}
+                  className={`rounded px-2.5 text-sm font-medium transition-colors ${filtroVisibilidad === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  {l}
+                </button>
+              ))}
             </div>
-          </div>
-
-          {/* Precio Máx */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Precio Máx</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium pointer-events-none">$</span>
-              <Input
-                type="text"
-                inputMode="numeric"
-                placeholder="999.999.999"
-                value={precioMaxDisplay}
-                onChange={(e) => {
-                  const raw = parsePeso(e.target.value);
-                  const formatted = formatPeso(raw);
-                  setPrecioMaxDisplay(formatted);
-                  handleNumericFiltroChange('precioMax', raw);
-                }}
-                className="pl-7"
-              />
-            </div>
-          </div>
-
-          {/* Cantidad Mín */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Cant. Mín</label>
-            <Input
-              type="number"
-              placeholder="0"
-              value={filtros.cantidadMin}
-              onChange={(e) => handleNumericFiltroChange('cantidadMin', e.target.value)}
-            />
-          </div>
-
-          {/* Cantidad Máx */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Cant. Máx</label>
-            <Input
-              type="number"
-              placeholder="9999"
-              value={filtros.cantidadMax}
-              onChange={(e) => handleNumericFiltroChange('cantidadMax', e.target.value)}
-            />
-          </div>
-
-          {/* Visibilidad */}
-          <div>
-            <label className="text-sm font-medium mb-1 block">Visibilidad</label>
-            <Select
-              value={filtroVisibilidad}
-              onValueChange={(value: any) => { setFiltroVisibilidad(value); setPage(1); }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Todos" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="visibles">👁️ Visibles</SelectItem>
-                <SelectItem value="ocultos">🚫 Ocultos</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
 
-        {/* Botón limpiar al fondo, izquierda */}
-        <div className="flex justify-start pt-1 border-t border-gray-200">
-          <Button variant="ghost" size="sm" onClick={limpiarFiltros} className="text-gray-500 hover:text-red-600">
-            <X className="h-4 w-4 mr-1" />
-            Limpiar todo
-          </Button>
+        {chips.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {chips.map((c) => (
+              <span key={c.key} className="inline-flex items-center gap-1 rounded-full bg-primary/[0.07] py-1 pl-2.5 pr-1 text-xs font-medium text-primary">
+                {c.label}
+                <button onClick={c.clear} className="rounded-full p-0.5 hover:bg-primary/10" aria-label={`Quitar ${c.label}`}>
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <button onClick={limpiarFiltros} className="text-xs font-medium text-muted-foreground hover:text-foreground">
+              Limpiar todo
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Barra de progreso en recargas */}
+      <div className="relative h-0.5 overflow-hidden">
+        {loading && !isInitialLoad && <div className="absolute inset-0 animate-pulse bg-primary/70" />}
+      </div>
+
+      {showSkeleton ? (
+        <div className="divide-y">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3">
+              <Skeleton className="h-11 w-11 rounded-md" />
+              <div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/3" /></div>
+              <Skeleton className="h-4 w-20" />
+            </div>
+          ))}
         </div>
-      </div>
-    )}
-
-    {/* Barra de progreso sutil — solo visible en recargas (no en la primera carga) */}
-    {loading && !isInitialLoad && (
-      <div className="h-0.5 w-full bg-gray-100 rounded overflow-hidden -mb-4">
-        <div className="h-full bg-blue-500 animate-pulse" style={{ width: '60%' }} />
-      </div>
-    )}
-
-    {/* Tabla o mensaje vacío */}
-    <div className={`transition-opacity duration-150 ${loading && !isInitialLoad ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
-    {productos.length === 0 ? (
-      <div className="text-center py-10 text-gray-500">
-        {totalServerItems === 0 && !loading
-          ? "No hay productos disponibles"
-          : loading ? "Buscando..." : "No se encontraron productos con los filtros aplicados"
-        }
-      </div>
-    ) : (
-      <>
-        {/* Tabla - Con scroll horizontal en móviles */}
-        <div className="rounded-xl border bg-card shadow-card overflow-x-auto">
+      ) : productos.length === 0 ? (
+        <EmptyState
+          icon={PackageSearch}
+          title={chips.length || debouncedSearch ? "Ningún producto coincide" : "No hay productos"}
+          description={chips.length || debouncedSearch ? "Prueba con otra búsqueda o quita algún filtro." : "Sincroniza con el ERP para traer el catálogo."}
+          action={(chips.length > 0 || !!debouncedSearch) && <Button variant="outline" onClick={limpiarFiltros}>Limpiar filtros</Button>}
+          className="m-4 border-0"
+        />
+      ) : (
+        <div className={`overflow-x-auto transition-opacity ${loading && !isInitialLoad ? "pointer-events-none opacity-60" : ""}`}>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-20">Imagen</TableHead>
-                <TableHead className="min-w-[100px]">ID</TableHead>
-                <TableHead className="min-w-[200px]">Nombre</TableHead>
-                <TableHead className="min-w-[100px]">Precio</TableHead>
-                <TableHead className="min-w-[100px]">Lista 2</TableHead>
-                <TableHead className="min-w-[120px]">Cantidad</TableHead>
-                <TableHead className="min-w-[150px]">Categoría</TableHead>
-                <TableHead className="min-w-[120px]">Colores</TableHead>
-                <TableHead className="min-w-[120px]">Marca</TableHead>
-                <TableHead className="min-w-[150px]">Estado</TableHead>
-                <TableHead className="text-right min-w-[180px]">Acciones</TableHead>
+                <TableHead className="min-w-[320px]">Producto</TableHead>
+                <TableHead className="min-w-[160px]">Categoría</TableHead>
+                <TableHead className="text-right">Precio</TableHead>
+                <TableHead className="text-right">Stock</TableHead>
+                <TableHead>Contenido</TableHead>
+                <TableHead>Tienda</TableHead>
+                <TableHead className="w-[1%]" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {productos.map((producto) => (
-                <TableRow key={producto.idproducto}>
-                  <TableCell>
-                    {producto.imagenes && producto.imagenes.length > 0 ? (
-                      <img
-                        src={producto.imagenes[0].url}
-                        alt={producto.nombreproducto}
-                        className="w-16 h-16 object-cover rounded-md"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 bg-gray-100 rounded-md flex items-center justify-center">
-                        <span className="text-gray-400 text-xs">Sin imagen</span>
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{producto.idproducto}</TableCell>
-                  <TableCell className="max-w-[360px]">
-                    {producto.nombre_comercial ? (
-                      <>
-                        <div className="font-medium text-foreground leading-snug">
-                          {producto.nombre_comercial}
-                          {producto.nombre_comercial_origen === 'ia' && (
-                            <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 rounded bg-primary/[0.07] px-1 py-px align-middle text-[10px] font-semibold text-primary" title="Generado con IA">
-                              <Sparkles className="h-2.5 w-2.5" /> IA
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground truncate" title="Nombre interno ERP">
-                          ERP: {producto.nombreproducto}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="font-medium leading-snug">{producto.nombreproducto}</div>
-                        <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-amber-700">
-                          <Sparkles className="h-3 w-3" /> Sin nombre comercial
-                        </div>
-                      </>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {producto.lista1 !== undefined
-                      ? `${Number(producto.lista1).toLocaleString()}`
-                      : "Sin precio"}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                        producto.lista2_activa
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {producto.lista2_activa ? "✅ Activa" : "⏸️ Inactiva"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap ${
-                        getCantidadColor(producto.cantidad || 0)
-                      }`}
-                    >
-                      {producto.cantidad !== undefined ? producto.cantidad : 0}
-                        {producto.cantidad !== undefined && (
-                          <span className="ml-1 text-xs">
-                            {producto.cantidad <= 0 ? "Sin stock" :
-                             producto.cantidad <= 10 ? "Poco stock" : "En stock"}
-                          </span>
-                        )}
-                        
-                    </span>
-                  </TableCell>
-                  <TableCell>{producto.categorias || "Sin categoría"}</TableCell>
-                  <TableCell>{producto.colores || "Sin colores"}</TableCell>
-                  <TableCell>{producto.marca || "Sin marca"}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
-                          producto.estado === "Completo"
-                            ? "bg-green-100 text-green-800"
-                            : producto.estado === "Incompleto"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {producto.estado === "Completo"
-                          ? "✅ Completo"
-                          : producto.estado === "Incompleto"
-                          ? "⚠️ Incompleto"
-                          : "❌ Sin completar"}
-                      </span>
-
-                      {producto.activo_manual !== null && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 whitespace-nowrap">
-                          📌 Manual
-                        </span>
-                      )}
-                      {producto.activo_manual === null && !producto.activo && (
-                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 whitespace-nowrap">
-                          🤖 Auto
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleNavigateToForm(producto.idproducto)}
-                        className="px-2"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={producto.activo ? "outline" : "default"}
-                        onClick={() => handleToggleActivo(producto.idproducto)}
-                        title={producto.activo ? "Ocultar" : "Mostrar"}
-                        className={`${producto.activo ? "text-orange-600 hover:bg-orange-50" : "bg-green-600 hover:bg-green-700"} px-2 sm:px-3`}
-                      >
-                        {producto.activo ? (
-                          <X className="h-4 w-4" />
+              {productos.map((producto) => {
+                const img = producto.imagenes?.[0]?.url;
+                const cats = producto.tieneCategorias && producto.categorias ? producto.categorias.split(", ") : [];
+                const firstCat = cats[0]?.split(" → ").pop();
+                const stock = producto.cantidad ?? 0;
+                const content = [
+                  { ok: !!img, label: "Imagen", icon: ImageIcon },
+                  { ok: !!producto.nombre_comercial, label: "Nombre comercial", icon: Sparkles },
+                  { ok: !!producto.caracteristica?.trim(), label: "Características técnicas", icon: ListChecks },
+                  { ok: !!producto.descripcion?.trim(), label: "Descripción", icon: FileText },
+                ];
+                return (
+                  <TableRow key={producto.idproducto} className={!producto.activo ? "bg-muted/20" : undefined}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {img ? (
+                          <img src={img} alt="" className="h-11 w-11 shrink-0 rounded-md border bg-white object-contain" loading="lazy" />
                         ) : (
-                          <CheckCircle className="h-4 w-4" />
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-dashed bg-muted/50 text-muted-foreground" title="Sin imagen">
+                            <ImageOff className="h-4 w-4" />
+                          </div>
                         )}
-                        <span className="ml-1 hidden lg:inline">
-                          {producto.activo ? "Ocultar" : "Mostrar"}
+                        <div className="min-w-0">
+                          <button
+                            onClick={() => handleNavigateToForm(producto.idproducto)}
+                            className="block max-w-[420px] text-left text-sm font-medium leading-snug text-foreground hover:text-primary hover:underline"
+                          >
+                            {producto.nombre_comercial || producto.nombreproducto}
+                            {producto.nombre_comercial_origen === "ia" && (
+                              <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 rounded bg-primary/[0.07] px-1 py-px align-middle text-[10px] font-semibold text-primary" title="Nombre generado con IA">
+                                <Sparkles className="h-2.5 w-2.5" /> IA
+                              </span>
+                            )}
+                          </button>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="font-mono">{producto.idproducto}</span>
+                            {producto.marca && producto.tieneMarca && <><span>·</span><span>{producto.marca}</span></>}
+                            {producto.nombre_comercial && (
+                              <><span>·</span><span className="truncate max-w-[220px]" title={`Nombre ERP: ${producto.nombreproducto}`}>ERP: {producto.nombreproducto}</span></>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {firstCat ? (
+                        <span className="inline-flex max-w-[200px] items-center gap-1 text-sm" title={cats.join("\n")}>
+                          <span className="truncate">{firstCat}</span>
+                          {cats.length > 1 && <span className="shrink-0 rounded bg-muted px-1 text-[11px] text-muted-foreground">+{cats.length - 1}</span>}
                         </span>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      ) : (
+                        <span className="text-xs font-medium text-amber-700">Sin categoría</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="whitespace-nowrap font-semibold tabular">{formatCOP(producto.lista1)}</div>
+                      {producto.lista2_activa && producto.lista2 ? (
+                        <div className="whitespace-nowrap text-xs text-muted-foreground tabular" title="Lista 2 activa">Lista 2: {formatCOP(producto.lista2)}</div>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <StatusBadge tone={stock <= 0 ? "danger" : stock <= 5 ? "warning" : "neutral"} className="tabular">
+                        {stock <= 0 ? "Agotado" : `${new Intl.NumberFormat("es-CO").format(stock)} uds.`}
+                      </StatusBadge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1" aria-label={`Contenido: ${content.filter((c) => c.ok).length} de 4`}>
+                        {content.map((c) => (
+                          <span
+                            key={c.label}
+                            title={`${c.label}: ${c.ok ? "sí" : "falta"}`}
+                            className={`flex h-6 w-6 items-center justify-center rounded ${c.ok ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-300"}`}
+                          >
+                            <c.icon className="h-3.5 w-3.5" />
+                          </span>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-start gap-1">
+                        <StatusBadge tone={producto.activo ? "success" : "neutral"}>{producto.activo ? "Visible" : "Oculto"}</StatusBadge>
+                        {producto.activo_manual !== null && producto.activo_manual !== undefined && (
+                          <span className="text-[11px] text-muted-foreground" title="La sincronización con el ERP respeta esta decisión">Control manual</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => handleNavigateToForm(producto.idproducto)} className="text-muted-foreground hover:text-foreground">
+                          <Pencil className="mr-1.5 h-4 w-4" /> Editar
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label="Más acciones">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem onSelect={() => setToggleTarget(producto)}>
+                              {producto.activo ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                              {producto.activo ? "Ocultar de la tienda" : "Mostrar en la tienda"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
+      )}
 
-        {/* Paginación del servidor */}
-        <Pagination
-          currentPage={page}
-          totalPages={totalServerPages}
-          itemsPerPage={itemsPerPage}
-          totalItems={totalServerItems}
-          onPageChange={(p) => setPage(p)}
-          onItemsPerPageChange={(n) => { setItemsPerPage(n); setPage(1); }}
-          onNextPage={() => setPage(p => Math.min(p + 1, totalServerPages))}
-          onPreviousPage={() => setPage(p => Math.max(p - 1, 1))}
-          canGoNext={page < totalServerPages}
-          canGoPrevious={page > 1}
-          getPageNumbers={() => {
-            const maxShow = 5;
-            const half = Math.floor(maxShow / 2);
-            let start = Math.max(1, page - half);
-            let end   = Math.min(totalServerPages, start + maxShow - 1);
-            if (end - start < maxShow - 1) start = Math.max(1, end - maxShow + 1);
-            return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-          }}
-          getPaginationInfo={() => ({
-            startItem:  totalServerItems === 0 ? 0 : (page - 1) * itemsPerPage + 1,
-            endItem:    Math.min(page * itemsPerPage, totalServerItems),
-            totalItems: totalServerItems,
-          })}
-          itemsPerPageOptions={[10, 25, 50, 100]}
-        />
-      </>
-    )}
-    </div>
+      {!showSkeleton && productos.length > 0 && (
+        <div className="border-t px-3 py-2 sm:px-4">
+          <Pagination
+            currentPage={page}
+            totalPages={totalServerPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={totalServerItems}
+            onPageChange={(p) => setPage(p)}
+            onItemsPerPageChange={(n) => { setItemsPerPage(n); setPage(1); }}
+            onNextPage={() => setPage(p => Math.min(p + 1, totalServerPages))}
+            onPreviousPage={() => setPage(p => Math.max(p - 1, 1))}
+            canGoNext={page < totalServerPages}
+            canGoPrevious={page > 1}
+            getPageNumbers={() => {
+              const maxShow = 5;
+              const half = Math.floor(maxShow / 2);
+              let start = Math.max(1, page - half);
+              let end   = Math.min(totalServerPages, start + maxShow - 1);
+              if (end - start < maxShow - 1) start = Math.max(1, end - maxShow + 1);
+              return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+            }}
+            getPaginationInfo={() => ({
+              startItem:  totalServerItems === 0 ? 0 : (page - 1) * itemsPerPage + 1,
+              endItem:    Math.min(page * itemsPerPage, totalServerItems),
+              totalItems: totalServerItems,
+            })}
+            itemsPerPageOptions={[25, 50, 100]}
+          />
+        </div>
+      )}
+    </Card>
+
+    {/* Confirmación para ocultar/mostrar (antes: confirm() del navegador) */}
+    <AlertDialog open={!!toggleTarget} onOpenChange={(o) => !o && setToggleTarget(null)}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {toggleTarget?.activo ? "¿Ocultar de la tienda?" : "¿Mostrar en la tienda?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">{toggleTarget?.nombre_comercial || toggleTarget?.nombreproducto}</p>
+              {toggleTarget?.activo ? (
+                <p>El producto no se elimina: deja de verse en la tienda y puedes volver a mostrarlo cuando quieras.</p>
+              ) : (
+                <p>El producto volverá a verse en la tienda.</p>
+              )}
+              <p>Quedará bajo <span className="font-medium text-foreground">control manual</span>: la sincronización con el ERP respetará esta decisión.</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => { const id = toggleTarget?.idproducto; setToggleTarget(null); if (id) handleToggleActivo(id); }}
+            className={toggleTarget?.activo ? "bg-amber-600 hover:bg-amber-700" : "bg-emerald-600 hover:bg-emerald-700"}
+          >
+            {toggleTarget?.activo ? "Ocultar" : "Mostrar"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 );
 }

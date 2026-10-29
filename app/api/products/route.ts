@@ -117,7 +117,8 @@ export async function GET(request: NextRequest) {
     // Visibilidad
     if (visibilidad === "visibles") where.activo = true;
     else if (visibilidad === "ocultos") where.activo = false;
-    else where.activo = true; // default: solo activos
+    // "todos" explícito (panel admin): sin filtro. Sin parámetro (tienda): solo activos
+    else if (!(visibilidad === "todos" && searchParams.has("visibilidad"))) where.activo = true;
 
     // Rangos de precio y stock
     if (precioMin !== null) and.push({ lista1: { gte: precioMin } });
@@ -162,6 +163,13 @@ export async function GET(request: NextRequest) {
           nombre: childName,
           padre:  { nombre: parentName },
         }}}});
+      } else if (searchParams.get("incluirSub") === "1") {
+        // Panel admin: una categoría principal incluye los productos de sus subcategorías
+        and.push({ categorias: { some: { categoria: { OR: [
+          { nombre: categoria },
+          { padre: { nombre: categoria } },
+          { padre: { padre: { nombre: categoria } } },
+        ] } } } });
       } else {
         and.push({ categorias: { some: { categoria: { nombre: categoria } } } });
       }
@@ -234,6 +242,7 @@ export async function GET(request: NextRequest) {
         nombre_comercial_origen: producto.nombre_comercial_origen,
         lista1:              producto.lista1?.toNumber(),
         lista2:              producto.lista2?.toNumber(),
+        lista2_activa:       producto.lista2_activa,
         cantidad:            producto.cantidad || 0,
         categorias:          categoriasString,
         colores:             coloresString,

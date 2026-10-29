@@ -12,15 +12,11 @@ function getFirebaseAdmin() {
 
       const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT;
 
-      console.log(`🛠️ Ruta de credenciales desde .env: ${serviceAccountPath}`);
-
       if (!serviceAccountPath) {
         throw new Error("🚨 La variable FIREBASE_SERVICE_ACCOUNT no está definida en .env");
       }
 
       const absolutePath = path.resolve(serviceAccountPath);
-      console.log(`🔍 Probando con la ruta absoluta: ${absolutePath}`);
-
       if (!fs.existsSync(absolutePath)) {
         throw new Error("🚨 No se encontró el archivo de credenciales en la ruta: " + absolutePath);
       }
@@ -36,11 +32,18 @@ function getFirebaseAdmin() {
       console.error("🚨 Error inicializando Firebase Admin:", error);
       throw error;
     }
-  } else {
-    console.log("⚠️ Firebase Admin ya estaba inicializado");
   }
 
   return admin;
 }
 
-export default getFirebaseAdmin();
+// Inicialización perezosa: se conecta al primer uso (admin.auth(), ...), no al importar.
+// Antes, si faltaba la credencial, el error al importar rompía `next build` y cualquier
+// ruta que cargara este módulo; ahora solo falla la operación que necesita Firebase.
+const lazyAdmin = new Proxy({} as typeof admin, {
+  get(_target, prop) {
+    return (getFirebaseAdmin() as any)[prop];
+  },
+});
+
+export default lazyAdmin;

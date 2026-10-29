@@ -129,6 +129,11 @@ model TipoPaquete {
     ivaincluido       String?  @db.Char(4)
     descripcion       String?  @db.Text
     caracteristica    String?  @db.Text
+    // Origen del contenido de catálogo: 'ia' (agente) | 'manual'. NULL con texto = escrito antes
+    // del agente (se trata como manual: el agente nunca lo sobrescribe)
+    descripcion_origen     String?   @db.VarChar(10)
+    caracteristica_origen  String?   @db.VarChar(10)
+    contenido_ia_at        DateTime?
     shopify_product_id  String?   @db.VarChar(255)
     shopify_variant_id  String?   @db.VarChar(255)
     shopify_synced_at   DateTime?

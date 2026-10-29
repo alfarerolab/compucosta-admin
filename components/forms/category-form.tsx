@@ -58,6 +58,10 @@ interface CategoryFormProps {
   parentName?: string;
   onSubmit?: (data: CategoryFormData) => Promise<void>;
   triggerButton?: React.ReactElement;
+  /** Modo controlado: permite abrir el diálogo desde fuera (p. ej. un menú de acciones) */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }
 
 const CategoryForm: React.FC<CategoryFormProps> = ({
@@ -67,8 +71,16 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   parentName,
   onSubmit,
   triggerButton,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
 }) => {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(value);
+    onOpenChange?.(value);
+  };
   const [categoriasPadre, setCategoriasPadre] = useState<Category[]>([]);
   const [loadingPadres, setLoadingPadres] = useState(false);
 
@@ -157,7 +169,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
       );
     } catch (error) {
       console.error('Error submitting form:', error);
-      toast.error("Error al guardar la categoría");
+      toast.error(error instanceof Error && error.message ? error.message : "Error al guardar la categoría");
     }
   };
 
@@ -182,7 +194,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+      {!hideTrigger && <DialogTrigger asChild>
         {triggerButton || (
           mode === "edit" ? (
             <Button variant="ghost" size="icon">
@@ -201,7 +213,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
             </Button>
           )
         )}
-      </DialogTrigger>
+      </DialogTrigger>}
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>

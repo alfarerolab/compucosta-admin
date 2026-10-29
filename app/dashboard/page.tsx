@@ -1,162 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Overview } from "@/components/Overview";
-import { RecentSales } from "@/components/RecentSales";
-import {
-  DollarSign,
-  ShoppingCart,
-  CreditCard,
-  Package,
-  Users,
-  TrendingUp,
-  MessageSquare,
-  AlertTriangle,
-  RefreshCw,
-  Trophy
-} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import {
+  DollarSign, ShoppingCart, CreditCard, Package, AlertTriangle, RefreshCw, Trophy,
+  PackageX, UploadCloud, FileText, MessageSquare, ImageOff, Tags, ListChecks, Sparkles, ArrowRight,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import dynamic from "next/dynamic";
+import { RecentSales } from "@/components/RecentSales";
 import { StatCard } from "@/components/shared/stat-card";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { cn } from "@/lib/utils";
 
-interface DashboardStats {
-  totalRevenue: number;
-  totalOrders: number;
-  totalProducts: number;
-  totalCategories: number;
-  totalBrands: number;
-  lowStockProducts: number;
-  monthlyOrders: number;
-  todayMessages: number;
-  chartData: Array<{
-    name: string;
-    ingresos: number;
-    pedidos: number;
-    month: number;
-  }>;
-  recentOrders: Array<{
-    id: string;
-    usuario: string;
-    total: number;
-    estado: string;
-    fecha: string;
-    items: number;
-  }>;
-  topProducts: Array<{
-    id: string;
-    nombre: string;
-    precio: number;
-    vendidos: number;
-    imagen: string;
-  }>;
-  averageOrderValue: number;
-  growthRate: number;
-  lastUpdated: string;
-  // Estadísticas de usuarios unificadas
-  userStats: {
-    total: number;
-    totalAdmins: number;
-    totalClients: number;
-    totalModerators?: number;
-    newUsersThisMonth: number;
-    activeUsersToday: number;
-    adminUsers: number; // Para compatibilidad
-    clientUsers: number; // Para compatibilidad
+// La librería de gráficos (recharts) es lo más pesado del panel: se descarga aparte
+// para que las métricas aparezcan sin esperarla
+const Overview = dynamic(() => import("@/components/Overview").then((m) => m.Overview), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[380px] w-full rounded-lg" />,
+});
+
+interface DashboardData {
+  sales: { totalRevenue: number; revenueMonth: number; revenuePrev: number; growthRate: number | null; paidOrders: number; averageOrderValue: number };
+  orders: { total: number; thisMonth: number; lastMonth: number; pendingPayment: number; billing: { billed: number; queued: number; error: number } };
+  catalog: {
+    total: number; active: number; inactive: number; outOfStock: number; lowStock: number; lowStockMax: number; needsShopifySync: number;
+    quality: { withoutImage: number; withoutDescription: number; withoutSpecs: number; withoutCommercialName: number };
+    categories: number; rootCategories: number; brands: number;
   };
+  support: { activeChats: number; messages24h: number; unreadMessages: number };
+  users: { admins: number };
+  chartData: Array<{ name: string; year: number; month: number; ingresos: number; pedidos: number }>;
+  topProducts: Array<{ id: string; nombre: string; precio: number; vendidos: number; ingresos: number; imagen: string }>;
+  recentOrders: Array<{ id: string; numero: number | null; usuario: string; total: number; estado: string; fecha: string; items: number }>;
+  lastUpdated: string;
 }
 
-const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-
-// Completa los 12 meses del año; los meses sin datos se muestran en 0 (nunca con valores inventados)
-const generateYearlyChartData = (existingData: any[]) =>
-  MONTHS.map((month, index) => {
-    const existingMonth = existingData.find(item =>
-      item.name === month || item.month === index + 1
-    );
-    return {
-      name: month,
-      ingresos: existingMonth?.ingresos || 0,
-      pedidos: existingMonth?.pedidos || 0,
-      month: index + 1
-    };
-  });
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
-const formatNumber = (num: number) => {
-  return new Intl.NumberFormat('es-CO').format(num);
-};
-
-const percentOf = (part: number, total: number) =>
-  total > 0 ? ((part / total) * 100).toFixed(1) : '0';
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(amount);
+const formatNumber = (num: number) => new Intl.NumberFormat('es-CO').format(num);
+const pct = (part: number, total: number) => (total > 0 ? Math.round((part / total) * 100) : 0);
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [clients, setClients] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
-  const currentYear = new Date().getFullYear();
 
-  const fetchDashboardStats = useCallback(async () => {
+  const fetchData = useCallback(async () => {
+    setRefreshing(true);
     try {
-      setRefreshing(true);
-
-      // Estadísticas del dashboard y de usuarios en paralelo
-      const [dashboardResponse, usersResponse] = await Promise.all([
-        fetch('/api/dashboard'),
-        fetch('/api/users'),
-      ]);
-      const [dashboardData, usersData] = await Promise.all([
-        dashboardResponse.json(),
-        usersResponse.json(),
-      ]);
-
-      if (!dashboardResponse.ok) {
-        throw new Error(dashboardData.error || 'Error al cargar las estadísticas del dashboard');
-      }
-
-      if (!usersResponse.ok) {
-        throw new Error('Error al cargar las estadísticas de usuarios');
-      }
-
-      if (dashboardData.success) {
-        // Combinar datos del dashboard con estadísticas actualizadas de usuarios
-        const enhancedData = {
-          ...dashboardData.data,
-          chartData: generateYearlyChartData(dashboardData.data.chartData || []),
-          userStats: {
-            total: usersData.total || 0,
-            totalAdmins: usersData.totalAdmins || 0,
-            totalClients: usersData.totalClients || 0,
-            totalModerators: usersData.totalModerators || 0,
-            newUsersThisMonth: usersData.newUsersThisMonth || 0,
-            activeUsersToday: usersData.activeUsersToday || 0,
-            // Para compatibilidad con el código existente
-            adminUsers: usersData.totalAdmins || 0,
-            clientUsers: usersData.totalClients || 0
-          },
-          recentOrders: dashboardData.data.recentOrders || []
-        };
-
-        setStats(enhancedData);
-        setLastFetched(new Date());
-        setError(null);
-      }
+      const res = await fetch('/api/dashboard', { cache: 'no-store' });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'No se pudieron cargar las métricas');
+      setData(json.data);
+      setError(null);
     } catch (err: any) {
-      console.error('Error fetching dashboard stats:', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -164,14 +67,19 @@ export default function Dashboard() {
     }
   }, []);
 
+  // Clientes de la tienda (Firebase): opcional y en segundo plano, nunca bloquea el panel
   useEffect(() => {
-    fetchDashboardStats();
+    fetch('/api/users')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setClients(j ? j.totalClients ?? null : null))
+      .catch(() => setClients(null));
+  }, []);
 
-    // Actualizar cada 5 minutos
-    const interval = setInterval(fetchDashboardStats, 5 * 60 * 1000);
-
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [fetchDashboardStats]);
+  }, [fetchData]);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -181,15 +89,15 @@ export default function Dashboard() {
   const header = (
     <PageHeader
       title="Panel de Control"
-      description={`${greeting}. Este es el resumen de la tienda.`}
+      description={`${greeting}. Resumen de ventas, catálogo y operación.`}
       actions={!loading && (
         <>
-          {lastFetched && (
+          {data && (
             <span className="text-xs text-muted-foreground">
-              Actualizado a las {lastFetched.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              Actualizado a las {new Date(data.lastUpdated).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={fetchDashboardStats} disabled={refreshing}>
+          <Button variant="outline" size="sm" onClick={fetchData} disabled={refreshing}>
             <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
             Actualizar
           </Button>
@@ -200,194 +108,149 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex-1 space-y-4">
+      <div className="space-y-6">
         {header}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
-          {[...Array(8)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <Skeleton className="h-4 w-[120px]" />
-                <Skeleton className="h-8 w-8" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-[100px] mb-2" />
-                <Skeleton className="h-3 w-[150px]" />
-              </CardContent>
-            </Card>
-          ))}
+          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-[118px] rounded-xl" />)}
         </div>
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
-          <Card className="lg:col-span-4">
-            <CardHeader>
-              <Skeleton className="h-6 w-[150px]" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-[350px] w-full" />
-            </CardContent>
-          </Card>
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <Skeleton className="h-6 w-[150px]" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center space-x-4">
-                    <Skeleton className="h-12 w-12 rounded-full" />
-                    <div className="space-y-2 flex-1">
-                      <Skeleton className="h-4 w-[120px]" />
-                      <Skeleton className="h-3 w-[80px]" />
-                    </div>
-                    <Skeleton className="h-4 w-[60px]" />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <Skeleton className="h-[420px] rounded-xl lg:col-span-4" />
+          <Skeleton className="h-[420px] rounded-xl lg:col-span-3" />
         </div>
       </div>
     );
   }
 
-  if (!stats) {
+  if (!data) {
     return (
-      <div className="flex-1 space-y-4">
+      <div className="space-y-6">
         {header}
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center space-x-2 text-red-600">
+            <div className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="h-5 w-5" />
-              <p>Error al cargar las estadísticas{error ? `: ${error}` : ''}</p>
+              <p>Error al cargar las métricas{error ? `: ${error}` : ''}</p>
             </div>
-            <button
-              onClick={fetchDashboardStats}
-              disabled={refreshing}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-60"
-            >
-              {refreshing ? 'Reintentando...' : 'Reintentar'}
-            </button>
+            <Button className="mt-4" onClick={fetchData} disabled={refreshing}>{refreshing ? 'Reintentando...' : 'Reintentar'}</Button>
           </CardContent>
         </Card>
       </div>
     );
   }
 
+  const { sales, orders, catalog, support } = data;
+  const q = catalog.quality;
+  const complete = (missing: number) => pct(catalog.active - missing, catalog.active);
+  const monthName = new Date().toLocaleDateString('es-CO', { month: 'long' });
+
   return (
-    <div className="flex-1 space-y-4">
+    <div className="space-y-6">
       {header}
 
-      {/* Si falla un refresco se conservan los últimos datos y se avisa */}
       {error && (
         <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          No se pudieron actualizar las estadísticas: {error}
+          No se pudieron actualizar las métricas: {error}
         </div>
       )}
 
-      {/* Estadísticas principales */}
+      {/* Ventas */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="Ingresos Totales"
-          value={formatCurrency(stats.totalRevenue)}
-          trend={stats.growthRate}
-          hint="vs. mes pasado"
+          title={`Ventas de ${monthName}`}
+          value={formatCurrency(sales.revenueMonth)}
+          trend={sales.growthRate ?? undefined}
+          hint={sales.growthRate === null ? 'sin ventas el mes anterior para comparar' : 'vs. mes anterior'}
           icon={DollarSign}
           tone="success"
         />
         <StatCard
-          title="Pedidos Totales"
-          value={formatNumber(stats.totalOrders)}
-          hint={`${formatNumber(stats.monthlyOrders)} este mes`}
+          title="Pedidos del mes"
+          value={formatNumber(orders.thisMonth)}
+          hint={`${formatNumber(orders.total)} en total · ${formatNumber(orders.pendingPayment)} con pago pendiente`}
           icon={ShoppingCart}
           tone="brand"
           href="/dashboard/orders"
         />
         <StatCard
-          title="Valor Promedio"
-          value={formatCurrency(stats.averageOrderValue)}
-          hint="Por pedido"
+          title="Ticket promedio"
+          value={formatCurrency(sales.averageOrderValue)}
+          hint={`${formatNumber(sales.paidOrders)} pedidos pagados · ${formatCurrency(sales.totalRevenue)} histórico`}
           icon={CreditCard}
           tone="info"
         />
         <StatCard
-          title="Productos Activos"
-          value={formatNumber(stats.totalProducts)}
-          hint={`${formatNumber(stats.lowStockProducts)} con stock bajo`}
+          title="Productos activos"
+          value={formatNumber(catalog.active)}
+          hint={`${formatNumber(catalog.inactive)} inactivos · ${formatNumber(catalog.brands)} marcas`}
           icon={Package}
           tone="neutral"
           href="/dashboard/products"
         />
       </div>
 
-      {/* Estadísticas secundarias */}
+      {/* Operación: lo que requiere atención */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="Usuarios Totales"
-          value={formatNumber(stats.userStats.total)}
-          hint={`${formatNumber(stats.userStats.totalClients)} clientes, ${formatNumber(stats.userStats.totalAdmins)} admins`}
-          icon={Users}
-          tone="violet"
-          href="/dashboard/user"
-        />
-        <StatCard
-          title="Categorías"
-          value={formatNumber(stats.totalCategories)}
-          hint={`${formatNumber(stats.totalBrands)} marcas registradas`}
-          icon={TrendingUp}
-          tone="neutral"
-          href="/dashboard/categories"
-        />
-        <StatCard
-          title="Mensajes Hoy"
-          value={formatNumber(stats.todayMessages)}
-          hint="Últimas 24 horas"
-          icon={MessageSquare}
-          tone="info"
-          href="/dashboard/chat"
-        />
-        <StatCard
-          title="Stock Bajo"
-          value={formatNumber(stats.lowStockProducts)}
-          valueClassName={stats.lowStockProducts > 0 ? "text-orange-600" : undefined}
-          hint="Productos con menos de 10 unidades"
-          icon={AlertTriangle}
+          title="Stock crítico"
+          value={formatNumber(catalog.outOfStock + catalog.lowStock)}
+          valueClassName={catalog.outOfStock + catalog.lowStock > 0 ? "text-amber-700" : undefined}
+          hint={`${formatNumber(catalog.outOfStock)} agotados · ${formatNumber(catalog.lowStock)} con ≤ ${catalog.lowStockMax} uds.`}
+          icon={PackageX}
           tone="warning"
           href="/dashboard/products"
         />
+        <StatCard
+          title="Pendientes de Shopify"
+          value={formatNumber(catalog.needsShopifySync)}
+          hint="productos con cambios sin publicar"
+          icon={UploadCloud}
+          tone="violet"
+          href="/dashboard/products"
+        />
+        <StatCard
+          title="Facturación electrónica"
+          value={formatNumber(orders.billing.billed)}
+          valueClassName={orders.billing.error > 0 ? "text-red-600" : undefined}
+          hint={`facturados · ${formatNumber(orders.billing.queued)} en cola · ${formatNumber(orders.billing.error)} con error`}
+          icon={FileText}
+          tone={orders.billing.error > 0 ? "danger" : "success"}
+          href="/dashboard/orders"
+        />
+        <StatCard
+          title="Chat con clientes"
+          value={formatNumber(support.unreadMessages)}
+          valueClassName={support.unreadMessages > 0 ? "text-primary" : undefined}
+          hint={`sin leer · ${formatNumber(support.activeChats)} chats activos · ${formatNumber(support.messages24h)} mensajes en 24 h`}
+          icon={MessageSquare}
+          tone="brand"
+          href="/dashboard/chat"
+        />
       </div>
 
-      {/* Gráficos y listas */}
+      {/* Gráfico + pedidos recientes */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
         <Card className="lg:col-span-4 min-w-0">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Visión General {currentYear}</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Ingresos y pedidos durante todo el año {currentYear}
-            </p>
+            <CardTitle className="text-base font-semibold">Ventas de los últimos 12 meses</CardTitle>
+            <p className="text-sm text-muted-foreground">Ingresos de pedidos pagados y número de pedidos por mes</p>
           </CardHeader>
           <CardContent className="pl-2">
-            <Overview data={stats.chartData} />
+            <Overview data={data.chartData} />
           </CardContent>
         </Card>
 
         <Card className="lg:col-span-3 min-w-0">
           <CardHeader className="flex flex-row items-start justify-between space-y-0">
             <div>
-              <CardTitle className="text-base font-semibold">Pedidos Recientes</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1.5">
-                {stats.recentOrders.length > 0
-                  ? `Últimos ${stats.recentOrders.length} pedidos realizados`
-                  : 'No hay pedidos recientes'
-                }
-              </p>
+              <CardTitle className="text-base font-semibold">Pedidos recientes</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1.5">Últimos pedidos recibidos</p>
             </div>
-            <Link href="/dashboard/orders" className="text-sm font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap">
-              Ver todos
-            </Link>
+            <Link href="/dashboard/orders" className="text-sm font-medium text-primary hover:underline whitespace-nowrap">Ver todos</Link>
           </CardHeader>
           <CardContent>
-            {stats.recentOrders.length > 0 ? (
-              <RecentSales orders={stats.recentOrders} />
+            {data.recentOrders.length > 0 ? (
+              <RecentSales orders={data.recentOrders} />
             ) : (
               <EmptyState icon={ShoppingCart} title="Aún no hay pedidos" description="Los pedidos nuevos aparecerán aquí." className="py-8" />
             )}
@@ -395,106 +258,97 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Productos más vendidos */}
-      {stats.topProducts && stats.topProducts.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Productos Más Vendidos</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Top {stats.topProducts.length} productos con más ventas
-            </p>
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+        {/* Calidad del catálogo */}
+        <Card className="lg:col-span-4">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0">
+            <div>
+              <CardTitle className="text-base font-semibold">Calidad del catálogo</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                Qué tan completos están los {formatNumber(catalog.active)} productos activos que ve el cliente
+              </p>
+            </div>
+            <ListChecks className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              {stats.topProducts.map((product, index) => (
-                <div key={product.id} className="flex items-center gap-3 p-4 border rounded-lg transition-colors hover:bg-muted/40">
-                  <span className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular",
-                    index === 0 ? "bg-amber-100 text-amber-700" : index < 3 ? "bg-gray-100 text-gray-700" : "bg-gray-50 text-gray-500"
-                  )}>
-                    {index === 0 ? <Trophy className="h-4 w-4" /> : index + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" title={product.nombre}>
-                      {product.nombre}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatCurrency(product.precio)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatNumber(product.vendidos)} vendidos
-                    </p>
+          <CardContent className="space-y-4">
+            {[
+              { label: 'Con imagen', missing: q.withoutImage, icon: ImageOff, hint: 'sin imagen' },
+              { label: 'Con nombre comercial', missing: q.withoutCommercialName, icon: Sparkles, hint: 'sin nombre comercial' },
+              { label: 'Con características técnicas', missing: q.withoutSpecs, icon: ListChecks, hint: 'sin características' },
+              { label: 'Con descripción', missing: q.withoutDescription, icon: FileText, hint: 'sin descripción' },
+            ].map((row) => {
+              const p = complete(row.missing);
+              return (
+                <div key={row.label} className="space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="font-medium">{row.label}</span>
+                    <span className="tabular text-muted-foreground">
+                      <span className="font-semibold text-foreground">{p}%</span>
+                      <span className="ml-2 text-xs">{formatNumber(row.missing)} {row.hint}</span>
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={cn("h-full rounded-full transition-all", p >= 90 ? "bg-emerald-500" : p >= 60 ? "bg-amber-500" : "bg-primary")}
+                      style={{ width: `${p}%` }}
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Estadísticas detalladas de usuarios */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-semibold">Actividad de Usuarios</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Estadísticas de usuarios en tiempo real
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Usuarios Nuevos (Este Mes)</span>
-                <span className="text-2xl font-bold text-green-600">
-                  +{formatNumber(stats.userStats.newUsersThisMonth || 0)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Usuarios Activos (Hoy)</span>
-                <span className="text-2xl font-bold text-blue-600">
-                  {formatNumber(stats.userStats.activeUsersToday || 0)}
-                </span>
-              </div>
+              );
+            })}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm">
+              <span className="text-muted-foreground">
+                <Tags className="mr-1 inline h-4 w-4" />
+                {formatNumber(catalog.categories)} categorías ({formatNumber(catalog.rootCategories)} principales)
+              </span>
+              <Link href="/dashboard/products" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                Completar productos <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Más vendidos */}
+        <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle className="text-base font-semibold">Distribución de Usuarios</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Desglose por tipo de usuario
-            </p>
+            <CardTitle className="text-base font-semibold">Más vendidos</CardTitle>
+            <p className="text-sm text-muted-foreground">Unidades vendidas en pedidos pagados</p>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                { label: 'Clientes del Ecommerce', value: stats.userStats.totalClients, bar: 'bg-purple-500' },
-                { label: 'Administradores', value: stats.userStats.totalAdmins, bar: 'bg-sky-500' },
-                ...((stats.userStats.totalModerators ?? 0) > 0
-                  ? [{ label: 'Moderadores', value: stats.userStats.totalModerators ?? 0, bar: 'bg-amber-500' }]
-                  : []),
-              ].map((row) => {
-                const pct = percentOf(row.value, stats.userStats.total);
-                return (
-                  <div key={row.label} className="space-y-1.5">
-                    <div className="flex justify-between items-baseline">
-                      <span className="text-sm font-medium">{row.label}</span>
-                      <span className="text-sm">
-                        <span className="font-bold">{formatNumber(row.value)}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{pct}%</span>
-                      </span>
+            {data.topProducts.length === 0 ? (
+              <EmptyState icon={Trophy} title="Sin ventas registradas" description="Cuando haya pedidos pagados verás aquí los productos que más se venden." className="py-8" />
+            ) : (
+              <div className="-mx-2 divide-y">
+                {data.topProducts.map((p, i) => (
+                  <div key={p.id} className="flex items-center gap-3 rounded-lg px-2 py-3">
+                    <span className={cn(
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular",
+                      i === 0 ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
+                    )}>
+                      {i === 0 ? <Trophy className="h-4 w-4" /> : i + 1}
+                    </span>
+                    {p.imagen ? (
+                      <img src={p.imagen} alt="" className="h-10 w-10 shrink-0 rounded-md border object-cover" loading="lazy" />
+                    ) : (
+                      <div className="h-10 w-10 shrink-0 rounded-md border bg-muted" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium" title={p.nombre}>{p.nombre}</p>
+                      <p className="text-xs text-muted-foreground tabular">{formatCurrency(p.ingresos)} vendidos</p>
                     </div>
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div className={cn("h-full rounded-full", row.bar)} style={{ width: `${pct}%` }} />
-                    </div>
+                    <span className="text-sm font-semibold tabular">{formatNumber(p.vendidos)} uds.</span>
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        {formatNumber(data.users.admins)} administradores
+        {clients !== null && <> · {formatNumber(clients)} clientes registrados en la tienda</>}
+      </p>
     </div>
   );
 }
