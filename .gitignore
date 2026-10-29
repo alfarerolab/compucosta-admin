@@ -49,3 +49,10 @@ secrets/
 *service-account*.json
 # La plantilla sí se versiona
 !.env.example
+
+# Volcados de base de datos: contienen datos de clientes y credenciales. NUNCA versionar.
+*.sql
+*.sql.gz
+*.dump
+# Las migraciones de Prisma sí se versionan
+!prisma/migrations/**/*.sql
