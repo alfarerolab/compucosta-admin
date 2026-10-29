@@ -2,6 +2,40 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
+// SEG-15 — Autenticación de eventos de administrador. Antes cualquier visitante podía emitir
+// "join-admin" y recibir los mensajes de TODOS los clientes, o enviar "admin-message" como personal.
+// Se valida la cookie de sesión del panel (JWT firmado por /api/auth/login).
+import 'dotenv/config';
+import jwt from 'jsonwebtoken';
+import type { Socket } from 'socket.io';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.warn('⚠️  [socket] JWT_SECRET no configurado: los eventos de admin NO se están autenticando. Configúralo en .env');
+}
+
+function getCookie(cookieHeader: string | undefined, name: string): string | null {
+  if (!cookieHeader) return null;
+  const match = cookieHeader.split(';').map((c) => c.trim()).find((c) => c.startsWith(name + '='));
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
+}
+
+function isAdminSocket(socket: Socket): boolean {
+  if (!JWT_SECRET) return true; // compatibilidad mientras no se configure el secreto
+  const token = getCookie(socket.handshake.headers.cookie, 'token') || (socket.handshake.auth?.token as string | undefined);
+  if (!token) return false;
+  try {
+    jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function rejectNonAdmin(socket: Socket, event: string) {
+  console.warn(`🚫 [socket] ${socket.id} intentó "${event}" sin sesión de admin válida`);
+  socket.emit('auth-error', { error: 'No autorizado', event });
+}
+
 const server = createServer();
 
 const io = new Server(server, {
@@ -13,7 +47,7 @@ const io = new Server(server, {
       "https://shop.compucosta.com",
       "https://admin.compucosta.com",
       "https://compucosta.com",
-      "https:/www.compucosta.com"
+      "https://www.compucosta.com"
     ],
     methods: ["GET", "POST"],
     credentials: true,
@@ -44,6 +78,7 @@ io.on("connection", (socket) => {
 
   // EVENTO PARA ADMIN JOIN
   socket.on("join-admin", () => {
+    if (!isAdminSocket(socket)) return rejectNonAdmin(socket, "join-admin");
     socket.join("admin-channel");
     socketsAdmin.add(socket.id);
     console.log(`👨‍💼 Admin ${socket.id} se unió al canal`);
@@ -197,6 +232,7 @@ io.on("connection", (socket) => {
 
   // EVENTO PARA MENSAJES DE ADMIN
   socket.on("admin-message", (data: { idChat: string, texto: string }) => {
+    if (!isAdminSocket(socket)) return rejectNonAdmin(socket, "admin-message");
     console.log("📨 Mensaje de admin:", data);
 
     if (!data.idChat || !data.texto) {
@@ -298,6 +334,7 @@ io.on("connection", (socket) => {
 
   // DEBUGGING: Logs adicionales para troubleshooting
   socket.on("debug-rooms", () => {
+    if (!isAdminSocket(socket)) return rejectNonAdmin(socket, "debug-rooms");
     console.log(`🔍 Socket ${socket.id} está en rooms:`, Array.from(socket.rooms));
     socket.emit("debug-response", { rooms: Array.from(socket.rooms) });
   });

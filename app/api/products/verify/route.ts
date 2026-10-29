@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+import { ensureStaff } from "@/lib/auth";
 export async function GET() {
   try {
     // Contar TODOS los productos (incluyendo inactivos)
@@ -89,6 +90,8 @@ export async function GET() {
 
 // Endpoint para verificar un producto específico
 export async function POST(request: Request) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { idproducto } = await request.json();
 

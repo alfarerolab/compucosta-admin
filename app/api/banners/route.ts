@@ -1,6 +1,7 @@
 // app/api/banners/route.ts
 import { BannerType } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { ensureStaff } from "@/lib/auth";
 import prismadb from "@/lib/prismadb";
 
 export async function GET() {
@@ -20,6 +21,8 @@ export async function GET() {
   }
 }
 export async function POST(request: Request) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const body = await request.json();
     const { title, imageUrl, isActive, bannerType } = body;

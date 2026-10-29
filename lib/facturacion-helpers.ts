@@ -132,7 +132,7 @@ export async function obtenerSiguienteNumero(): Promise<number> {
   }
 
   const numero = await prisma.$transaction(async (tx: any) => {
-    const rows: any[] = await tx.$queryRawUnsafe(`SELECT * FROM consecutivo_factura WHERE prefijo = '${ERP_PREFIJO_FACTURA}' FOR UPDATE`);
+    const rows: any[] = await tx.$queryRaw`SELECT * FROM consecutivo_factura WHERE prefijo = ${ERP_PREFIJO_FACTURA} FOR UPDATE`;
     let registro: any;
     if (rows.length === 0) {
       registro = await tx.consecutivo_factura.create({ data: { prefijo: ERP_PREFIJO_FACTURA, ultimo_numero: ultimoNumeroERP } });
@@ -264,6 +264,9 @@ export async function crearFacturaElectronicaERP(order: any): Promise<FacturaRes
     const detalles: any[] = [];
     const productosNoEncontrados: string[] = [];
     let pos = 1;
+    // IMPORTANTE: la factura identifica cada línea SOLO por idproducto (código ERP, vía SKU).
+    // Nunca usar item.title ni producto.nombre_comercial aquí: el título de Shopify es el
+    // nombre comercial generado por IA y no debe llegar a documentos fiscales.
     for (const item of order.line_items || []) {
       const producto = await prisma.producto.findFirst({ where: { OR: [{ idproducto: item.sku }, { shopify_variant_id: item.variant_id?.toString() }] } });
       if (!producto) { productosNoEncontrados.push(item.sku); continue; }

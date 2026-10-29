@@ -39,10 +39,7 @@ const nextConfig = {
         }
       : false,
 },
-  
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // (La opción `eslint` se eliminó: Next 16 ya no la admite y no ejecuta lint en el build)
   images: { unoptimized: true },
 
   // SEG-08 — Aplica los headers de seguridad a todas las rutas
@@ -51,6 +48,16 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: buildSecurityHeaders(),
+      },
+      // SEG-13 — Archivos subidos: nunca se ejecutan como página (bloquea scripts en SVG
+      // o en cualquier archivo malicioso subido antes de la validación por firma)
+      {
+        source: '/uploads/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; sandbox" },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'cross-origin' },
+        ],
       },
     ];
   },

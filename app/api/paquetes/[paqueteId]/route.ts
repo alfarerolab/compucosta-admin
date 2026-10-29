@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 
+import { ensureStaff } from "@/lib/auth";
 // GET - Obtener un paquete por ID
 export async function GET(
   req: Request,
@@ -35,6 +36,8 @@ export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ paqueteId: string }> }
 ) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const { paqueteId } = await params;
     const body = await req.json();
@@ -74,6 +77,8 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ paqueteId: string }> }
 ) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const { paqueteId } = await params;
     if (!paqueteId) {

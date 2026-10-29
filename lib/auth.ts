@@ -6,6 +6,37 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { getJwtSecretKey, JWT_ALGORITHM } from "@/lib/jwt-secret";
+
+function readToken(req: Request): string | undefined {
+  const bearer = req.headers.get("authorization")?.replace("Bearer ", "").trim();
+  if (bearer) return bearer;
+  const cookie = req.headers.get("cookie") ?? "";
+  const match = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("token="));
+  return match ? decodeURIComponent(match.slice("token=".length)) : undefined;
+}
+
+// ─── Guardia de personal (cualquier rol del panel) ────────────────────────────
+/**
+ * Defensa en profundidad para escrituras del catálogo y operaciones del panel:
+ * exige una sesión válida del panel (cualquier rol), igual que el middleware.
+ * Si el middleware se desconfigura, estas rutas siguen protegidas por sí mismas.
+ *
+ *   const authError = await ensureStaff(request);
+ *   if (authError) return authError;
+ */
+export async function ensureStaff(req: Request): Promise<NextResponse | null> {
+  const token = readToken(req);
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized: token requerido" }, { status: 401 });
+  }
+  try {
+    await jwtVerify(token, getJwtSecretKey(), { algorithms: [JWT_ALGORITHM] });
+    return null;
+  } catch {
+    return NextResponse.json({ error: "Unauthorized: token inválido o expirado" }, { status: 401 });
+  }
+}
 
 // ─── Enmascaramiento de PII (AGENTS.md §6.4 — SEG-03) ────────────────────────
 
@@ -61,8 +92,8 @@ export async function ensureAdmin(req: NextRequest): Promise<NextResponse | null
   }
 
   try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
-    const { payload } = await jwtVerify(token, secret);
+    // getJwtSecretKey lanza si falta JWT_SECRET (antes se firmaba con el texto "undefined")
+    const { payload } = await jwtVerify(token, getJwtSecretKey(), { algorithms: [JWT_ALGORITHM] });
 
     if ((payload.role as string)?.toLowerCase() !== "admin") {
       return NextResponse.json(

@@ -199,7 +199,7 @@ async function shopifySyncProduct(
   // Construir payload
   const esActualizacion = !!shopify_product_id;
   const productData: any = {
-    title: producto.nombreproducto,
+    title: producto.nombre_comercial?.trim() || producto.nombreproducto,
     body_html: producto.descripcion || '',
     vendor: producto.marca_texto || 'Sin marca',
     product_type: producto.categorias_texto || 'General',
@@ -426,6 +426,7 @@ export async function runShopifySyncMaster(): Promise<{
         id: true,
         idproducto: true,
         nombreproducto: true,
+        nombre_comercial: true,
         descripcion: true,
         lista1: true,
         lista2: true,

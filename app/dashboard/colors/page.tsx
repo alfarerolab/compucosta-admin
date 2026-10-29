@@ -1,8 +1,9 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Pencil, Trash } from "lucide-react";
+import { Plus, Pencil, Trash, Palette } from "lucide-react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useToast } from "@/hooks/use-toast";
@@ -61,9 +62,9 @@ export default function ColorsPage() {
   const isValidHex = (hex: string) => /^#([0-9A-Fa-f0-9]{3}|[0-9A-Fa-f0-9]{6})$/i.test(hex);
 
   return (
-    <div className="space-y-4 p-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Colores</h2>
+    <div className="space-y-4">
+      <div className={pageHeaderLayout}>
+        <PageTitle title="Colores" icon={Palette} description="Variantes de color disponibles para los productos" />
         <Button onClick={() => router.push('colors/new')}>
           <Plus className="mr-2 h-4 w-4" />
           Agregar Color

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { ensureStaff } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 interface ImagenProducto {
@@ -7,6 +8,19 @@ interface ImagenProducto {
   altText?: string;
   orden: number;
   esPrincipal: boolean;
+}
+
+// Nombre comercial: solo se toca si cambió. El origen lo indica el formulario ('ia' si se dejó
+// tal cual lo propuso el agente); cualquier otro cambio cuenta como edición manual.
+function nombreComercialUpdate(data: any, actual: string | null) {
+  if (data.nombre_comercial === undefined) return {};
+  const nuevo = String(data.nombre_comercial ?? "").trim().slice(0, 255) || null;
+  if (nuevo === (actual ?? null)) return {};
+  return {
+    nombre_comercial: nuevo,
+    nombre_comercial_origen: nuevo ? (data.nombre_comercial_origen === "ia" ? "ia" : "manual") : null,
+    ...(nuevo && data.nombre_comercial_origen === "ia" ? { nombre_comercial_generado_at: new Date() } : {}),
+  };
 }
 
 // GET - Obtener producto por ID
@@ -98,6 +112,8 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ productId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     // ✅ CRITICAL FIX: Await params in Next.js 15+
     const { productId } = await params;
@@ -123,6 +139,7 @@ export async function PUT(
       select: {
         id: true,
         idproducto: true,
+        nombre_comercial: true,
         activo: true,
         activo_manual: true,
         shopify_product_id: true,
@@ -307,6 +324,7 @@ export async function PUT(
 
       caracteristica: data.caracteristica ?? "",
       descripcion: data.descripcion ?? "",
+      ...nombreComercialUpdate(data, productoExistente.nombre_comercial),
       slug: data.slug || productoExistente.idproducto,
       destacado: data.destacado ?? false,
       
@@ -454,6 +472,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ productId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     // ✅ CRITICAL FIX: Await params in Next.js 15+
     const { productId } = await params;

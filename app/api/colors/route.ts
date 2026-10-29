@@ -2,7 +2,10 @@
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 
+import { ensureStaff } from "@/lib/auth";
 export async function POST(req: Request) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const body = await req.json();
     const { nombre, codigoHex } = body;

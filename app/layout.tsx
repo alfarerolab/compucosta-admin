@@ -1,17 +1,24 @@
 // app/layout.tsx (Root Layout)
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Admin Computadores de la costa',
-  description: 'admin computadores de la costa',
+  title: {
+    default: 'Compucosta Admin',
+    template: '%s · Compucosta Admin',
+  },
+  description: 'Panel de administración de Computadores de la Costa',
   robots: {
     index: false,
     follow: false,
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#bd1729',
 };
 
 export default function RootLayout({
@@ -20,11 +27,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="es">
+    <html lang="es" className={inter.variable}>
       <head>
         <link rel="icon" href="/img.png" />
       </head>
-      <body className={inter.className}>
+      <body className="font-sans">
         {children}
       </body>
     </html>

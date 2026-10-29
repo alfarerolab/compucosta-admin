@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma }              from "@/lib/prisma";
 import { enqueueBillingJob }   from "@/lib/billingQueue";
-import { ensureAdmin }         from "@/lib/auth";
+import { ensureAdmin } from "@/lib/auth";
 
 // ensureAdmin importado desde @/lib/auth (AGENTS.md 6.6)
 

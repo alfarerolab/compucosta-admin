@@ -2,55 +2,49 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcrypt';
 import { SignJWT } from 'jose';
-const JWT_SECRET = process.env.JWT_SECRET || '0Gf(~93PoTkrEAS$k@';
-const secret = new TextEncoder().encode(JWT_SECRET);
+import { getJwtSecretKey, JWT_ALGORITHM } from '@/lib/jwt-secret';
+
 const isProd = process.env.NODE_ENV === 'production';
+
+// Hash bcrypt de relleno: cuando el usuario no existe se compara igual contra él,
+// para que el tiempo de respuesta no revele qué usuarios existen.
+const DUMMY_HASH = bcrypt.hashSync('compucosta-dummy-password', 10);
 
 export async function POST(request: Request) {
   try {
-    console.log('🔐 [LOGIN API] Inicio de petición');
-    console.log('🔑 [LOGIN API] JWT_SECRET usado:', JWT_SECRET.substring(0, 15) + '... (longitud: ' + JWT_SECRET.length + ')');
-    
-    const { usuario, contraseña } = await request.json();
-    console.log('📝 [LOGIN API] Usuario recibido:', usuario);
+    const body = await request.json().catch(() => ({}));
+    const usuario = typeof body.usuario === 'string' ? body.usuario.trim() : '';
+    const contraseña = typeof body.contraseña === 'string' ? body.contraseña : '';
 
     if (!usuario || !contraseña) {
-      console.log('❌ [LOGIN API] Faltan credenciales');
       return NextResponse.json({ message: 'Usuario y contraseña requeridos' }, { status: 400 });
     }
 
-    console.log('🔍 [LOGIN API] Buscando usuario en DB...');
+    // Límite defensivo: bcrypt solo usa 72 bytes y entradas enormes cuestan CPU
+    if (usuario.length > 100 || contraseña.length > 200) {
+      return NextResponse.json({ message: 'Credenciales incorrectas' }, { status: 401 });
+    }
+
     const user = await prisma.admin.findUnique({
       where: { usuario }
     });
 
-    if (!user) {
-      console.log('❌ [LOGIN API] Usuario no encontrado');
+    const isValid = await bcrypt.compare(contraseña, user?.contraseña ?? DUMMY_HASH);
+
+    if (!user || !isValid) {
+      console.warn('[LOGIN API] Intento de acceso fallido');
       return NextResponse.json({ message: 'Credenciales incorrectas' }, { status: 401 });
     }
 
-    console.log('✅ [LOGIN API] Usuario encontrado, verificando contraseña...');
-    const isValid = await bcrypt.compare(contraseña, user.contraseña);
-    
-    if (!isValid) {
-      console.log('❌ [LOGIN API] Contraseña incorrecta');
-      return NextResponse.json({ message: 'Credenciales incorrectas' }, { status: 401 });
-    }
-
-    console.log('✅ [LOGIN API] Contraseña válida, generando token...');
-    
     // ⭐ Usar jose en lugar de jsonwebtoken para compatibilidad con Edge Runtime
-    const token = await new SignJWT({ 
-      id: user.id, 
-      role: user.rol 
+    const token = await new SignJWT({
+      id: user.id,
+      role: user.rol
     })
-      .setProtectedHeader({ alg: 'HS256' })
+      .setProtectedHeader({ alg: JWT_ALGORITHM })
       .setIssuedAt()
       .setExpirationTime('24h')
-      .sign(secret);
-
-    console.log('✅ [LOGIN API] Token generado exitosamente');
-    console.log('🔑 [LOGIN API] Token (primeros 30 chars):', token.substring(0, 30) + '...');
+      .sign(getJwtSecretKey());
 
     const response = NextResponse.json({
       success: true,
@@ -61,20 +55,21 @@ export async function POST(request: Request) {
       }
     });
 
+    // SameSite=Lax: la cookie viaja en la navegación normal del panel pero no en
+    // peticiones iniciadas por otros sitios (mitiga CSRF)
     response.cookies.set('token', token, {
       httpOnly: true,
       path: '/',
       maxAge: 60 * 60 * 24,
-      sameSite: isProd ? 'none' : 'lax',
+      sameSite: 'lax',
       secure: isProd
     });
 
-    console.log('🎉 [LOGIN API] Login exitoso para usuario:', usuario);
     return response;
 
   } catch (error) {
     console.error('💥 [LOGIN API] Error:', error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'Error en el servidor'
     }, { status: 500 });
   }

@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 
+import { ensureStaff } from "@/lib/auth";
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ empresaId: string }> }
@@ -30,6 +31,8 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ empresaId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { empresaId } = await params;
     const body = await request.json();
@@ -66,6 +69,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ empresaId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { empresaId } = await params;
     const informacion = await prismadb.informacionEmpresa.delete({

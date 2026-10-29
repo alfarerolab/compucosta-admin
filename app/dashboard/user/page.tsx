@@ -1,5 +1,6 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -296,8 +297,8 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gestión de Usuarios</h1>
+      <div className={pageHeaderLayout}>
+        <PageTitle title="Usuarios" icon={Users} description="Administradores del panel y clientes registrados en la tienda" />
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
             <Button>

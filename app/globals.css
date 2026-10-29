@@ -4,35 +4,49 @@
  
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Base neutra ligeramente fría: más sobria que el blanco puro */
+    --background: 220 20% 97%;
+    --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 222 47% 11%;
  
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 222 47% 11%;
  
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
- 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
- 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
- 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
- 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Rojo corporativo Computadores de la Costa */
+    --primary: 354 78% 42%;
+    --primary-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Dorado del logotipo, para acentos puntuales */
+    --brand-gold: 45 96% 52%;
  
-    --radius: 0.5rem;
+    --secondary: 220 14% 95%;
+    --secondary-foreground: 222 47% 11%;
+ 
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 9% 46%;
+ 
+    --accent: 220 14% 95%;
+    --accent-foreground: 222 47% 11%;
+ 
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 69% 31%;
+    --warning: 32 95% 44%;
+
+    --border: 220 13% 90%;
+    --input: 220 13% 87%;
+    --ring: 354 78% 42%;
+ 
+    --radius: 0.625rem;
+
+    --chart-1: 160 84% 39%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 271 81% 56%;
+    --chart-5: 340 82% 52%;
   }
  
   .dark {
@@ -72,7 +86,23 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  h1, h2, h3 {
+    @apply tracking-tight;
+  }
+  /* Cifras alineadas en tablas y métricas */
+  table, .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: hsl(var(--primary) / 0.15);
+  }
+  /* Indicador de foco solo al navegar con teclado */
+  a:focus-visible,
+  button:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2;
   }
 }
 
@@ -85,4 +115,12 @@
   overflow: visible !important;
   height: auto !important;
   max-height: none !important;
+}
+
+/* Scrollbars discretas en navegadores WebKit */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9999px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
 }

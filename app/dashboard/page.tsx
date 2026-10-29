@@ -1,20 +1,28 @@
 "use client";
 
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Overview } from "@/components/Overview";
 import { RecentSales } from "@/components/RecentSales";
-import { 
-  DollarSign, 
-  ShoppingCart, 
-  CreditCard, 
+import {
+  DollarSign,
+  ShoppingCart,
+  CreditCard,
   Package,
   Users,
   TrendingUp,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
+  Trophy
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { StatCard } from "@/components/shared/stat-card";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
 
 interface DashboardStats {
   totalRevenue: number;
@@ -62,27 +70,63 @@ interface DashboardStats {
   };
 }
 
+const MONTHS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+// Completa los 12 meses del año; los meses sin datos se muestran en 0 (nunca con valores inventados)
+const generateYearlyChartData = (existingData: any[]) =>
+  MONTHS.map((month, index) => {
+    const existingMonth = existingData.find(item =>
+      item.name === month || item.month === index + 1
+    );
+    return {
+      name: month,
+      ingresos: existingMonth?.ingresos || 0,
+      pedidos: existingMonth?.pedidos || 0,
+      month: index + 1
+    };
+  });
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+const formatNumber = (num: number) => {
+  return new Intl.NumberFormat('es-CO').format(num);
+};
+
+const percentOf = (part: number, total: number) =>
+  total > 0 ? ((part / total) * 100).toFixed(1) : '0';
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentYear] = useState(new Date().getFullYear());
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const currentYear = new Date().getFullYear();
 
-  const fetchDashboardStats = async () => {
+  const fetchDashboardStats = useCallback(async () => {
     try {
-      setLoading(true);
-      
-      // Obtener estadísticas del dashboard
-      const dashboardResponse = await fetch('/api/dashboard');
-      const dashboardData = await dashboardResponse.json();
+      setRefreshing(true);
+
+      // Estadísticas del dashboard y de usuarios en paralelo
+      const [dashboardResponse, usersResponse] = await Promise.all([
+        fetch('/api/dashboard'),
+        fetch('/api/users'),
+      ]);
+      const [dashboardData, usersData] = await Promise.all([
+        dashboardResponse.json(),
+        usersResponse.json(),
+      ]);
 
       if (!dashboardResponse.ok) {
         throw new Error(dashboardData.error || 'Error al cargar las estadísticas del dashboard');
       }
-
-      // Obtener estadísticas de usuarios actualizadas
-      const usersResponse = await fetch('/api/users');
-      const usersData = await usersResponse.json();
 
       if (!usersResponse.ok) {
         throw new Error('Error al cargar las estadísticas de usuarios');
@@ -104,11 +148,11 @@ export default function Dashboard() {
             adminUsers: usersData.totalAdmins || 0,
             clientUsers: usersData.totalClients || 0
           },
-          // Asegurar que los pedidos recientes están actualizados
           recentOrders: dashboardData.data.recentOrders || []
         };
-        
+
         setStats(enhancedData);
+        setLastFetched(new Date());
         setError(null);
       }
     } catch (err: any) {
@@ -116,95 +160,54 @@ export default function Dashboard() {
       setError(err.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
-
-  // Función para generar datos de todo el año
-  const generateYearlyChartData = (existingData: any[]) => {
-    const months = [
-      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'
-    ];
-
-    const currentMonth = new Date().getMonth();
-    const yearlyData = months.map((month, index) => {
-      // Buscar datos existentes para este mes
-      const existingMonth = existingData.find(item => 
-        item.name === month || item.month === index + 1
-      );
-
-      if (existingMonth) {
-        return {
-          name: month,
-          ingresos: existingMonth.ingresos || 0,
-          pedidos: existingMonth.pedidos || 0,
-          month: index + 1
-        };
-      }
-
-      // Para meses futuros, mostrar 0
-      if (index > currentMonth) {
-        return {
-          name: month,
-          ingresos: 0,
-          pedidos: 0,
-          month: index + 1
-        };
-      }
-
-      // Para meses pasados sin datos, generar datos simulados basados en tendencias
-      const avgRevenue = existingData.reduce((acc, item) => acc + (item.ingresos || 0), 0) / Math.max(existingData.length, 1);
-      const avgOrders = existingData.reduce((acc, item) => acc + (item.pedidos || 0), 0) / Math.max(existingData.length, 1);
-      
-      return {
-        name: month,
-        ingresos: Math.round(avgRevenue * (0.8 + Math.random() * 0.4)),
-        pedidos: Math.round(avgOrders * (0.8 + Math.random() * 0.4)),
-        month: index + 1
-      };
-    });
-
-    return yearlyData;
-  };
+  }, []);
 
   useEffect(() => {
     fetchDashboardStats();
-    
+
     // Actualizar cada 5 minutos
     const interval = setInterval(fetchDashboardStats, 5 * 60 * 1000);
-    
+
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchDashboardStats]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const greeting = (() => {
+    const h = new Date().getHours();
+    return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  })();
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('es-CO').format(num);
-  };
-
-  const getGrowthText = (current: number, growth: number) => {
-    const sign = growth >= 0 ? '+' : '';
-    return `${sign}${growth.toFixed(1)}% desde el mes pasado`;
-  };
+  const header = (
+    <PageHeader
+      title="Panel de Control"
+      description={`${greeting}. Este es el resumen de la tienda.`}
+      actions={!loading && (
+        <>
+          {lastFetched && (
+            <span className="text-xs text-muted-foreground">
+              Actualizado a las {lastFetched.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={fetchDashboardStats} disabled={refreshing}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", refreshing && "animate-spin")} />
+            Actualizar
+          </Button>
+        </>
+      )}
+    />
+  );
 
   if (loading) {
     return (
-      <div className="flex-1 space-y-4 p-8 pt-6">
-        <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-bold tracking-tight">Panel de Control</h2>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
+      <div className="flex-1 space-y-4">
+        {header}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          {[...Array(8)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-4 w-[120px]" />
-                <Skeleton className="h-4 w-4" />
+                <Skeleton className="h-8 w-8" />
               </CardHeader>
               <CardContent>
                 <Skeleton className="h-8 w-[100px] mb-2" />
@@ -213,8 +216,8 @@ export default function Dashboard() {
             </Card>
           ))}
         </div>
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
-          <Card className="col-span-4">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+          <Card className="lg:col-span-4">
             <CardHeader>
               <Skeleton className="h-6 w-[150px]" />
             </CardHeader>
@@ -222,7 +225,7 @@ export default function Dashboard() {
               <Skeleton className="h-[350px] w-full" />
             </CardContent>
           </Card>
-          <Card className="col-span-3">
+          <Card className="lg:col-span-3">
             <CardHeader>
               <Skeleton className="h-6 w-[150px]" />
             </CardHeader>
@@ -246,21 +249,22 @@ export default function Dashboard() {
     );
   }
 
-  if (error) {
+  if (!stats) {
     return (
-      <div className="flex-1 space-y-4 p-8 pt-6">
-        <h2 className="text-3xl font-bold tracking-tight">Panel de Control</h2>
+      <div className="flex-1 space-y-4">
+        {header}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center space-x-2 text-red-600">
               <AlertTriangle className="h-5 w-5" />
-              <p>Error al cargar las estadísticas: {error}</p>
+              <p>Error al cargar las estadísticas{error ? `: ${error}` : ''}</p>
             </div>
-            <button 
+            <button
               onClick={fetchDashboardStats}
-              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              disabled={refreshing}
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-60"
             >
-              Reintentar
+              {refreshing ? 'Reintentando...' : 'Reintentar'}
             </button>
           </CardContent>
         </Card>
@@ -268,142 +272,95 @@ export default function Dashboard() {
     );
   }
 
-  if (!stats) return null;
-
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Panel de Control</h2>
-        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-          <span>Última actualización:</span>
-          <span>{new Date().toLocaleTimeString('es-ES')}</span>
-          <button 
-            onClick={fetchDashboardStats}
-            className="ml-2 text-blue-600 hover:text-blue-800"
-            disabled={loading}
-          >
-            Actualizar
-          </button>
+    <div className="flex-1 space-y-4">
+      {header}
+
+      {/* Si falla un refresco se conservan los últimos datos y se avisa */}
+      {error && (
+        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          No se pudieron actualizar las estadísticas: {error}
         </div>
-      </div>
+      )}
 
       {/* Estadísticas principales */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ingresos Totales</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
-            <p className="text-xs text-muted-foreground">
-              {getGrowthText(stats.totalRevenue, stats.growthRate)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pedidos Totales</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(stats.totalOrders)}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(stats.monthlyOrders)} este mes
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Promedio</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.averageOrderValue)}</div>
-            <p className="text-xs text-muted-foreground">
-              Por pedido
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Productos Activos</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(stats.totalProducts)}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats.lowStockProducts} con stock bajo
-            </p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Ingresos Totales"
+          value={formatCurrency(stats.totalRevenue)}
+          trend={stats.growthRate}
+          hint="vs. mes pasado"
+          icon={DollarSign}
+          tone="success"
+        />
+        <StatCard
+          title="Pedidos Totales"
+          value={formatNumber(stats.totalOrders)}
+          hint={`${formatNumber(stats.monthlyOrders)} este mes`}
+          icon={ShoppingCart}
+          tone="brand"
+          href="/dashboard/orders"
+        />
+        <StatCard
+          title="Valor Promedio"
+          value={formatCurrency(stats.averageOrderValue)}
+          hint="Por pedido"
+          icon={CreditCard}
+          tone="info"
+        />
+        <StatCard
+          title="Productos Activos"
+          value={formatNumber(stats.totalProducts)}
+          hint={`${formatNumber(stats.lowStockProducts)} con stock bajo`}
+          icon={Package}
+          tone="neutral"
+          href="/dashboard/products"
+        />
       </div>
 
-      {/* Estadísticas secundarias - Usuarios dinámicos */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usuarios Totales</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(stats.userStats.total)}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(stats.userStats.totalClients)} clientes, {formatNumber(stats.userStats.totalAdmins)} admins
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Categorías</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(stats.totalCategories)}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(stats.totalBrands)} marcas registradas
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mensajes Hoy</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(stats.todayMessages)}</div>
-            <p className="text-xs text-muted-foreground">
-              Últimas 24 horas
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {formatNumber(stats.lowStockProducts)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Productos con menos de 10 unidades
-            </p>
-          </CardContent>
-        </Card>
+      {/* Estadísticas secundarias */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Usuarios Totales"
+          value={formatNumber(stats.userStats.total)}
+          hint={`${formatNumber(stats.userStats.totalClients)} clientes, ${formatNumber(stats.userStats.totalAdmins)} admins`}
+          icon={Users}
+          tone="violet"
+          href="/dashboard/user"
+        />
+        <StatCard
+          title="Categorías"
+          value={formatNumber(stats.totalCategories)}
+          hint={`${formatNumber(stats.totalBrands)} marcas registradas`}
+          icon={TrendingUp}
+          tone="neutral"
+          href="/dashboard/categories"
+        />
+        <StatCard
+          title="Mensajes Hoy"
+          value={formatNumber(stats.todayMessages)}
+          hint="Últimas 24 horas"
+          icon={MessageSquare}
+          tone="info"
+          href="/dashboard/chat"
+        />
+        <StatCard
+          title="Stock Bajo"
+          value={formatNumber(stats.lowStockProducts)}
+          valueClassName={stats.lowStockProducts > 0 ? "text-orange-600" : undefined}
+          hint="Productos con menos de 10 unidades"
+          icon={AlertTriangle}
+          tone="warning"
+          href="/dashboard/products"
+        />
       </div>
 
       {/* Gráficos y listas */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
+        <Card className="lg:col-span-4 min-w-0">
           <CardHeader>
-            <CardTitle>Visión General {currentYear}</CardTitle>
+            <CardTitle className="text-base font-semibold">Visión General {currentYear}</CardTitle>
             <p className="text-sm text-muted-foreground">
               Ingresos y pedidos durante todo el año {currentYear}
             </p>
@@ -413,18 +370,27 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Pedidos Recientes</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {stats.recentOrders.length > 0 
-                ? `Últimos ${stats.recentOrders.length} pedidos realizados`
-                : 'No hay pedidos recientes'
-              }
-            </p>
+        <Card className="lg:col-span-3 min-w-0">
+          <CardHeader className="flex flex-row items-start justify-between space-y-0">
+            <div>
+              <CardTitle className="text-base font-semibold">Pedidos Recientes</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                {stats.recentOrders.length > 0
+                  ? `Últimos ${stats.recentOrders.length} pedidos realizados`
+                  : 'No hay pedidos recientes'
+                }
+              </p>
+            </div>
+            <Link href="/dashboard/orders" className="text-sm font-medium text-blue-600 hover:text-blue-800 whitespace-nowrap">
+              Ver todos
+            </Link>
           </CardHeader>
           <CardContent>
-            <RecentSales orders={stats.recentOrders} />
+            {stats.recentOrders.length > 0 ? (
+              <RecentSales orders={stats.recentOrders} />
+            ) : (
+              <EmptyState icon={ShoppingCart} title="Aún no hay pedidos" description="Los pedidos nuevos aparecerán aquí." className="py-8" />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -433,24 +399,30 @@ export default function Dashboard() {
       {stats.topProducts && stats.topProducts.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Productos Más Vendidos</CardTitle>
+            <CardTitle className="text-base font-semibold">Productos Más Vendidos</CardTitle>
             <p className="text-sm text-muted-foreground">
               Top {stats.topProducts.length} productos con más ventas
             </p>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-              {stats.topProducts.map((product) => (
-                <div key={product.id} className="flex items-center space-x-4 p-4 border rounded-lg">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {stats.topProducts.map((product, index) => (
+                <div key={product.id} className="flex items-center gap-3 p-4 border rounded-lg transition-colors hover:bg-muted/40">
+                  <span className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular",
+                    index === 0 ? "bg-amber-100 text-amber-700" : index < 3 ? "bg-gray-100 text-gray-700" : "bg-gray-50 text-gray-500"
+                  )}>
+                    {index === 0 ? <Trophy className="h-4 w-4" /> : index + 1}
+                  </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
+                    <p className="text-sm font-medium truncate" title={product.nombre}>
                       {product.nombre}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {formatCurrency(product.precio)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {product.vendidos} vendidos
+                      {formatNumber(product.vendidos)} vendidos
                     </p>
                   </div>
                 </div>
@@ -461,10 +433,10 @@ export default function Dashboard() {
       )}
 
       {/* Estadísticas detalladas de usuarios */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Actividad de Usuarios</CardTitle>
+            <CardTitle className="text-base font-semibold">Actividad de Usuarios</CardTitle>
             <p className="text-sm text-muted-foreground">
               Estadísticas de usuarios en tiempo real
             </p>
@@ -489,48 +461,36 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Distribución de Usuarios</CardTitle>
+            <CardTitle className="text-base font-semibold">Distribución de Usuarios</CardTitle>
             <p className="text-sm text-muted-foreground">
               Desglose por tipo de usuario
             </p>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Clientes del Ecommerce</span>
-                <div className="text-right">
-                  <div className="text-lg font-bold">{formatNumber(stats.userStats.totalClients)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {stats.userStats.total > 0 
-                      ? ((stats.userStats.totalClients / stats.userStats.total) * 100).toFixed(1)
-                      : 0
-                    }% del total
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Administradores</span>
-                <div className="text-right">
-                  <div className="text-lg font-bold">{formatNumber(stats.userStats.totalAdmins)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {stats.userStats.total > 0 
-                      ? ((stats.userStats.totalAdmins / stats.userStats.total) * 100).toFixed(1)
-                      : 0
-                    }% del total
-                  </div>
-                </div>
-              </div>
-              {stats.userStats.totalModerators && stats.userStats.totalModerators > 0 && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Moderadores</span>
-                  <div className="text-right">
-                    <div className="text-lg font-bold">{formatNumber(stats.userStats.totalModerators)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {((stats.userStats.totalModerators / stats.userStats.total) * 100).toFixed(1)}% del total
+              {[
+                { label: 'Clientes del Ecommerce', value: stats.userStats.totalClients, bar: 'bg-purple-500' },
+                { label: 'Administradores', value: stats.userStats.totalAdmins, bar: 'bg-sky-500' },
+                ...((stats.userStats.totalModerators ?? 0) > 0
+                  ? [{ label: 'Moderadores', value: stats.userStats.totalModerators ?? 0, bar: 'bg-amber-500' }]
+                  : []),
+              ].map((row) => {
+                const pct = percentOf(row.value, stats.userStats.total);
+                return (
+                  <div key={row.label} className="space-y-1.5">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-sm font-medium">{row.label}</span>
+                      <span className="text-sm">
+                        <span className="font-bold">{formatNumber(row.value)}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{pct}%</span>
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div className={cn("h-full rounded-full", row.bar)} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

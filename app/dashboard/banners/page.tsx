@@ -1,9 +1,10 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Pencil, Trash } from "lucide-react";
+import { Plus, Pencil, Trash, Images } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -64,8 +65,8 @@ export default function BannersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Banners</h2>
+      <div className={pageHeaderLayout}>
+        <PageTitle title="Banners" icon={Images} description="Imágenes promocionales de la portada y secciones de la tienda" />
         <Button onClick={() => router.push("/dashboard/banners/new")}>
           <Plus className="mr-2 h-4 w-4" />
           Agregar Banner

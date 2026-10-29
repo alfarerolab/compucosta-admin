@@ -507,7 +507,7 @@ export default function AdminChat() {
   );
 
   return (
-    <div className="flex flex-col md:flex-row h-screen min-h-0 overflow-hidden bg-gray-100">
+    <div className="flex flex-col md:flex-row flex-1 h-full min-h-0 overflow-hidden bg-gray-100">
       {/* Panel de lista de chats */}
       <div className={`md:w-1/3 w-full flex flex-col bg-white border-r border-gray-200 ${selectedChat ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b shrink-0">

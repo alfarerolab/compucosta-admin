@@ -83,7 +83,7 @@ const ServiciosPage = () => {
   if (loading) {
     return (
       <div className="flex-col">
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4">
           <div className="flex items-center justify-center h-32">
             <p>Cargando servicios...</p>
           </div>
@@ -94,7 +94,7 @@ const ServiciosPage = () => {
 
   return (
     <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex-1 space-y-4">
         {/* Pasar handleDelete al Client Component */}
         <ServiciosClient data={servicios} onDelete={handleDelete} />
       </div>

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import prismadb from '@/lib/prismadb';
 
+import { ensureStaff } from "@/lib/auth";
 // ✅ PUT - Actualizar marca (usa idmarca como identificador)
 export async function PUT(request: Request, { params }: { params: Promise<{ marcasId: string }> }) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { marcasId } = await params;
     const data = await request.json();
@@ -52,6 +55,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ marc
 
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ marcasId: string }> }) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { marcasId } = await params;
     const idmarca = parseInt(marcasId, 10);

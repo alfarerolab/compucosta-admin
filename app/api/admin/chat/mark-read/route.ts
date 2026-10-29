@@ -2,9 +2,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 
+import { ensureStaff } from "@/lib/auth";
 const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const body = await req.json();
     const { idChat } = body;

@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "@/lib/utils";
 
 interface HeadingProps {
   title: string;
@@ -8,9 +9,9 @@ interface HeadingProps {
 
 export function Heading({ title, description, className = "" }: HeadingProps) {
   return (
-    <div className={`mb-4 ${className}`}>
-      <h2 className="text-2xl font-bold">{title}</h2>
-      {description && <p className="text-muted-foreground">{description}</p>}
+    <div className={cn("mb-4", className)}>
+      <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.65rem]">{title}</h2>
+      {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
     </div>
   );
 }

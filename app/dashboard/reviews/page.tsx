@@ -1,7 +1,8 @@
 "use client";
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
-import { Trash2, Search, Filter } from "lucide-react";
+import { Trash2, Search, Filter, Star } from "lucide-react";
 
 interface Review {
   id: number;
@@ -156,18 +157,20 @@ const AdminReviews = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold mb-2">📌 Administrar Reseñas</h2>
-        <p className="text-gray-600">
-          Total de reseñas: <span className="font-semibold">{reviews.length}</span>
-          {filteredReviews.length !== reviews.length && (
-            <span className="ml-2 text-blue-600">
-              (Mostrando {filteredReviews.length})
-            </span>
-          )}
-        </p>
-      </div>
+    <div>
+      <PageTitle
+        className="mb-6"
+        title="Reseñas"
+        icon={Star}
+        description={
+          <>
+            {reviews.length} reseñas en total
+            {filteredReviews.length !== reviews.length && (
+              <span className="ml-1 text-foreground font-medium">· mostrando {filteredReviews.length}</span>
+            )}
+          </>
+        }
+      />
 
       {/* Filtros */}
       <div className="mb-6 flex flex-col md:flex-row gap-4 bg-white p-4 rounded-lg border">

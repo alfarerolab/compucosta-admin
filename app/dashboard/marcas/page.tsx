@@ -1,5 +1,6 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Trash, RefreshCw, Search, X } from "lucide-react";
+import { Pencil, Trash, RefreshCw, Search, X, Bookmark } from "lucide-react";
 import { toast } from "sonner";
 import MarcaForm from "@/components/forms/marca-form";
 import {
@@ -247,17 +248,17 @@ export default function MarcasPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-[60vh]">
         <div className="text-lg">Cargando marcas...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 p-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Gestión de Marcas</h2>
-        <div className="flex space-x-2">
+    <div className="space-y-4">
+      <div className={pageHeaderLayout}>
+        <PageTitle title="Marcas" icon={Bookmark} description={`${marcas.length} marcas registradas en el catálogo`} />
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             onClick={handleRefresh}
@@ -300,7 +301,7 @@ export default function MarcasPage() {
         </div>
       ) : (
         <>
-          <div className="rounded-md border">
+          <div className="rounded-xl border bg-card shadow-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>

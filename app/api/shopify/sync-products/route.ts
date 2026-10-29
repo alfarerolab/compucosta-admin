@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { ensureStaff } from "@/lib/auth";
 import crypto from "crypto";
 
 const prisma = new PrismaClient();
@@ -124,6 +125,8 @@ async function publicarEnCanalCompucosta(shopifyProductId: string) {
 function generarHashProducto(producto: any): string {
   const datosRelevantes = {
     nombreproducto: producto.nombreproducto,
+    // Solo si existe: así los productos sin nombre comercial conservan su hash y no se reenvían todos
+    ...(producto.nombre_comercial ? { nombre_comercial: producto.nombre_comercial } : {}),
     descripcion: producto.descripcion,
     lista1: producto.lista1?.toString(),
     lista2: producto.lista2?.toString(),
@@ -273,7 +276,7 @@ async function syncProductoToShopify(producto: any, forzar: boolean = false, rei
         })
         .map((img: any, index: number) => ({
           src: img.url,
-          alt: img.alt_text || producto.nombreproducto,
+          alt: img.alt_text || producto.nombre_comercial || producto.nombreproducto,
           position: index + 1
         })) || [];
       
@@ -282,7 +285,7 @@ async function syncProductoToShopify(producto: any, forzar: boolean = false, rei
       const shopifyStatus = producto.activo ? "active" : "draft";
       
       const productData: any = {
-        title: producto.nombreproducto,
+        title: producto.nombre_comercial?.trim() || producto.nombreproducto,
         body_html: producto.descripcion || "",
         vendor: producto.marca?.[0]?.marca?.nombre || "Sin marca",
         product_type: producto.categorias?.[0]?.categoria?.nombre || "General",
@@ -703,6 +706,8 @@ async function ejecutarSyncCompleto(forzarTodos: boolean) {
 }
 
 export async function POST(request: Request) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     // ✅ Validación de seguridad
     const validacion = validarSecretoAPI(request);

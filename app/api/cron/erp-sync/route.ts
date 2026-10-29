@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { enqueueErpSync } from '@/lib/syncQueue';
 
@@ -26,7 +27,9 @@ export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization') ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
-  if (token !== secret) {
+  const tokenBuf = Buffer.from(token);
+  const secretBuf = Buffer.from(secret);
+  if (tokenBuf.length !== secretBuf.length || !timingSafeEqual(tokenBuf, secretBuf)) {
     console.warn('⚠️  [cron/erp-sync] Token inválido — acceso denegado');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

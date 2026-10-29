@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import prismadb from "@/lib/prismadb";
 
+import { ensureStaff } from "@/lib/auth";
 // ─── PATCH: Aprobar una reseña por ID ─────────────────────────────────────────
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ reviewsId: string }> }
 ) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const { reviewsId } = await params;
     console.log("✅ PATCH /api/reviews/[reviewsId] — id:", reviewsId);
@@ -39,6 +42,8 @@ export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ reviewsId: string }> }
 ) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const { reviewsId } = await params;
     console.log("🗑️ DELETE /api/reviews/[reviewsId] — id:", reviewsId);

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { createHash } from "crypto";
 
+import { ensureStaff } from "@/lib/auth";
 // ─── Normalización de búsqueda ────────────────────────────────────────────────
 // Cubre: tildes/acentos, mayúsculas, guiones y puntos, espacios en unidades
 // (e.g. "16 gb" → "16gb"), y plurales simples en español.
@@ -36,8 +37,9 @@ function condicionesBusqueda(search: string): Prisma.productoWhereInput[] {
   const palabras = normalizarTexto(search).split(" ").filter(Boolean);
   return palabras.map((palabra) => ({
     OR: variantes(palabra).flatMap((v) => [
-      { nombreproducto: { contains: v } },
-      { idproducto:     { contains: v } },
+      { nombreproducto:   { contains: v } },
+      { nombre_comercial: { contains: v } },
+      { idproducto:       { contains: v } },
     ]),
   }));
 }
@@ -228,6 +230,8 @@ export async function GET(request: NextRequest) {
         slug:                producto.slug,
         idproducto:          producto.idproducto,
         nombreproducto:      producto.nombreproducto,
+        nombre_comercial:    producto.nombre_comercial,
+        nombre_comercial_origen: producto.nombre_comercial_origen,
         lista1:              producto.lista1?.toNumber(),
         lista2:              producto.lista2?.toNumber(),
         cantidad:            producto.cantidad || 0,
@@ -287,6 +291,8 @@ export async function GET(request: NextRequest) {
 
 // ─── DELETE — sin cambios ─────────────────────────────────────────────────────
 export async function DELETE(request: NextRequest) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { idproducto } = await request.json();
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -271,20 +272,17 @@ export default function PaquetesPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-[60vh]">
         <div className="text-lg">Cargando paquetes...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 p-8">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Package className="h-8 w-8" />
-          <h2 className="text-3xl font-bold tracking-tight">Gestión de Tipos de Paquetes</h2>
-        </div>
-        <div className="flex space-x-2">
+    <div className="space-y-4">
+      <div className={pageHeaderLayout}>
+        <PageTitle title="Tipos de paquete" icon={Package} description="Dimensiones y peso usados para calcular envíos" />
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             onClick={handleRefresh}
@@ -331,7 +329,7 @@ export default function PaquetesPage() {
         </div>
       ) : (
         <>
-          <div className="rounded-md border">
+          <div className="rounded-xl border bg-card shadow-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>

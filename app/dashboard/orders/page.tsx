@@ -11,7 +11,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Eye, RefreshCw, Download, Search, FileText, AlertCircle } from "lucide-react";
+import { Eye, RefreshCw, Download, Search, FileText, AlertCircle, ScrollText, CheckCircle2, Clock, Truck, Wallet, PackageSearch } from "lucide-react";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatCard } from "@/components/shared/stat-card";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -361,7 +365,8 @@ export default function OrdersPage() {
     const num = typeof amount === 'string' ? parseFloat(amount) : (amount || 0);
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
-      currency: currency || 'COP'
+      currency: currency || 'COP',
+      maximumFractionDigits: currency && currency !== 'COP' ? 2 : 0,
     }).format(num);
   };
 
@@ -379,96 +384,65 @@ export default function OrdersPage() {
     <div className="space-y-4">
       
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Pedidos</h2>
-        <div className="flex gap-2">
-          <Select value={dataSource} onValueChange={(v: any) => setDataSource(v)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="shopify">🛒 Desde Shopify</SelectItem>
-              <SelectItem value="local">💾 BD Local + Facturas</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <Button 
-            variant="outline" 
-            onClick={() => syncOrders(7)}
-            disabled={syncing}
-          >
-            <Download className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-            Sync 7 días
-          </Button>
-          
-          <Button 
-            variant="outline" 
-            onClick={() => syncOrders(30)}
-            disabled={syncing}
-          >
-            <Download className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-            Sync 30 días
-          </Button>
+      <PageHeader
+        title="Pedidos"
+        icon={ScrollText}
+        description="Consulta, sincroniza y factura los pedidos de la tienda."
+        actions={
+          <>
+            <Select value={dataSource} onValueChange={(v: any) => setDataSource(v)}>
+              <SelectTrigger className="w-[200px] bg-card">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="shopify">Origen: Shopify</SelectItem>
+                <SelectItem value="local">Origen: BD local + facturas</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Button onClick={fetchOrders} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="outline"
+              onClick={() => syncOrders(7)}
+              disabled={syncing}
+            >
+              <Download className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              Sync 7 días
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => syncOrders(30)}
+              disabled={syncing}
+            >
+              <Download className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              Sync 30 días
+            </Button>
+
+            <Button onClick={fetchOrders} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+          </>
+        }
+      />
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid gap-4 md:grid-cols-5">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pagados</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.paid}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pendientes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sin Enviar</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{stats.unfulfilled}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Ventas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xl font-bold text-blue-600">
-                ${stats.total_amount.toFixed(2)}
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+          <StatCard title="Total" value={stats.total} icon={ScrollText} tone="neutral" hint="pedidos cargados" />
+          <StatCard title="Pagados" value={stats.paid} icon={CheckCircle2} tone="success" />
+          <StatCard title="Pendientes" value={stats.pending} icon={Clock} tone="warning" />
+          <StatCard title="Sin enviar" value={stats.unfulfilled} icon={Truck} tone="info" />
+          <div className="col-span-2 lg:col-span-1">
+            <StatCard title="Total ventas" value={formatCurrency(stats.total_amount)} icon={Wallet} tone="brand" />
+          </div>
         </div>
       )}
 
       {/* Filters */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -530,7 +504,7 @@ export default function OrdersPage() {
       </Card>
 
       {/* Orders Table */}
-      <div className="rounded-md border">
+      <div className="rounded-xl border bg-card shadow-card overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -554,8 +528,13 @@ export default function OrdersPage() {
               </TableRow>
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={dataSource === 'local' ? 8 : 7} className="h-24 text-center">
-                  No se encontraron pedidos
+                <TableCell colSpan={dataSource === 'local' ? 8 : 7} className="p-6">
+                  <EmptyState
+                    icon={PackageSearch}
+                    title="No se encontraron pedidos"
+                    description={filters.search ? "Prueba con otro término de búsqueda o ajusta los filtros." : "Sincroniza con Shopify para traer los pedidos más recientes."}
+                    className="border-0 bg-transparent py-6"
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -573,7 +552,7 @@ export default function OrdersPage() {
                 return (
                   <TableRow key={order.id}>
                     <TableCell className="font-medium">
-                      <div>#{orderNum}</div>
+                      <div className="font-semibold text-foreground tabular">#{orderNum}</div>
                       {dataSource === 'local' && order.shopify_order_id && (
                         <div className="text-xs text-muted-foreground">
                           Shopify: {order.shopify_order_id}
@@ -581,7 +560,7 @@ export default function OrdersPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">
+                      <div className="text-sm text-muted-foreground whitespace-nowrap">
                         {formatDate(order.created_at)}
                       </div>
                     </TableCell>
@@ -590,50 +569,39 @@ export default function OrdersPage() {
                       <div className="text-xs text-muted-foreground">{email}</div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">
+                      <div className="font-semibold tabular whitespace-nowrap">
                         {formatCurrency(total, currency)}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getStatusBadge(order)}>
-                        {getStatusText(paymentStatus)}
-                      </Badge>
+                      <StatusBadge status={paymentStatus}>{getStatusText(paymentStatus)}</StatusBadge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getFulfillmentBadge(fulfillmentStatus)}>
-                        {getFulfillmentText(fulfillmentStatus)}
-                      </Badge>
+                      <StatusBadge status={fulfillmentStatus}>{getFulfillmentText(fulfillmentStatus)}</StatusBadge>
                     </TableCell>
                     
                     {dataSource === 'local' && (
                       <TableCell>
                         {order.erp_synced || order.billing_status === 'billed' ? (
-                          <Badge className="bg-green-500">
-                            ✅ {order.erp_doc_ref || 'Facturado'}
-                          </Badge>
+                          <StatusBadge tone="success" className="font-mono">
+                            {order.erp_doc_ref || 'Facturado'}
+                          </StatusBadge>
                         ) : order.facturacion_pendiente || order.billing_status === 'queued' ? (
-                          <Badge className="bg-yellow-500">
-                            ⏳ {order.razon_pendiente?.includes('Pago') ? 'Pago pendiente' : 'En Cola'}
-                          </Badge>
+                          <StatusBadge tone="warning">
+                            {order.razon_pendiente?.includes('Pago') ? 'Pago pendiente' : 'En cola'}
+                          </StatusBadge>
                         ) : order.erp_sync_error || order.billing_status === 'error' ? (
-                          <Badge className="bg-red-500">
-                            ❌ Error
-                          </Badge>
+                          <StatusBadge tone="danger">Error</StatusBadge>
                         ) : (
-                          <Badge variant="outline" className="text-gray-500">
-                            Sin factura
-                          </Badge>
+                          <StatusBadge tone="neutral" dot={false}>Sin factura</StatusBadge>
                         )}
                       </TableCell>
                     )}
                     
                     <TableCell className="text-right">
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => viewOrderDetails(order)}
-                      >
-                        <Eye className="h-4 w-4" />
+                      <Button variant="ghost" size="sm" onClick={() => viewOrderDetails(order)} className="text-muted-foreground hover:text-foreground">
+                        <Eye className="mr-1.5 h-4 w-4" />
+                        Ver
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -669,11 +637,11 @@ export default function OrdersPage() {
                     <div className="flex items-center justify-between">
                       <span className="font-medium">Estado ERP:</span>
                       {selectedOrder.erp_synced || selectedOrder.billing_status === 'billed' ? (
-                        <Badge className="bg-green-500">✅ Facturado</Badge>
+                        <StatusBadge tone="success">Facturado</StatusBadge>
                       ) : selectedOrder.facturacion_pendiente || selectedOrder.billing_status === 'queued' ? (
-                        <Badge className="bg-yellow-500">⏳ {selectedOrder.billing_status === 'queued' ? 'En cola de facturación' : 'Pendiente'}</Badge>
+                        <StatusBadge tone="warning">{selectedOrder.billing_status === 'queued' ? 'En cola de facturación' : 'Pendiente'}</StatusBadge>
                       ) : selectedOrder.erp_sync_error || selectedOrder.billing_status === 'error' ? (
-                        <Badge className="bg-red-500">❌ Error</Badge>
+                        <StatusBadge tone="danger">Error</StatusBadge>
                       ) : (
                         <Badge variant="outline">Sin procesar</Badge>
                       )}

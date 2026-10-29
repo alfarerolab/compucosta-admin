@@ -43,3 +43,9 @@ logs/
 # Firebase / Google credentials
 config/*firebase-adminsdk*.json
 config/prueba-5f0ca-firebase-adminsdk-tipls-f35a0a15ea.json
+
+# Credenciales locales (cuenta de servicio de Firebase, etc.)
+secrets/
+*service-account*.json
+# La plantilla sí se versiona
+!.env.example

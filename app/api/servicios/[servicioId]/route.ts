@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prismadb from '@/lib/prismadb';
 
+import { ensureStaff } from "@/lib/auth";
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ servicioId: string }> }
@@ -29,6 +30,8 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ servicioId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { servicioId } = await params;
     const body = await request.json();
@@ -103,6 +106,8 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ servicioId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { servicioId } = await params;
     // Verificar si el servicio existe

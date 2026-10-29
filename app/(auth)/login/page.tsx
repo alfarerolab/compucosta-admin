@@ -127,166 +127,197 @@ function Login() {
         }
     };
 
-    return (
-        <div className="h-screen bg-white flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                <div className="bg-gray-100/30 backdrop-blur-md border border-red-500/60 rounded-3xl p-8 space-y-6 shadow-lg">
-                    <div className="text-center space-y-4">
-                        <div className="relative mx-auto w-64 h-32">
-                            <Image src="/logo.png" alt="Logo" width={128} height={128} className="w-full h-full object-contain rounded-lg" priority />
-                        </div>
+    // El aviso de cierre de sesión es informativo, no un error
+    const isInfoMessage = error === "Has cerrado sesión correctamente.";
 
-                        <div className="space-y-1">
-                            <h1 className="text-2xl font-bold text-gray-900">Iniciar Sesión</h1>
-                            <p className="text-gray-600 text-sm">Bienvenido al sistema</p>
-                        </div>
+    return (
+        <div className="min-h-screen grid lg:grid-cols-[1.1fr_1fr] bg-white">
+            {/* Panel de marca */}
+            <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#8f0f1d] via-[#b3162a] to-[#d42a3c] p-12 text-white">
+                {/* Patrón de circuito sutil */}
+                <svg className="absolute inset-0 h-full w-full opacity-[0.08]" aria-hidden="true">
+                    <defs>
+                        <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+                            <path d="M48 0H0V48" fill="none" stroke="white" strokeWidth="1" />
+                            <circle cx="0" cy="0" r="2.5" fill="white" />
+                        </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                </svg>
+                <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
+                <div className="absolute -bottom-40 -left-24 h-[28rem] w-[28rem] rounded-full bg-[#f5c518]/20 blur-3xl" aria-hidden="true" />
+
+                <div className="relative">
+                    <div className="inline-flex rounded-xl bg-white px-4 py-3 shadow-lg shadow-black/10">
+                        <Image src="/logo.png" alt="Computadores de la Costa" width={180} height={64} className="h-10 w-auto object-contain" priority />
+                    </div>
+                </div>
+
+                <div className="relative max-w-md">
+                    <p className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium ring-1 ring-inset ring-white/20">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#f5c518]" />
+                        Panel administrativo
+                    </p>
+                    <h2 className="text-4xl font-semibold leading-tight tracking-tight">
+                        Gestiona tu tienda desde un solo lugar.
+                    </h2>
+                    <p className="mt-4 text-base text-white/75">
+                        Catálogo, pedidos, facturación electrónica y atención al cliente, sincronizados en tiempo real.
+                    </p>
+                    <ul className="mt-8 space-y-3 text-sm text-white/85">
+                        {["Inventario y precios sincronizados con Shopify", "Facturación electrónica integrada al ERP", "Chat con clientes en tiempo real"].map((item) => (
+                            <li key={item} className="flex items-center gap-3">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15">
+                                    <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" /></svg>
+                                </span>
+                                {item}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                <p className="relative text-xs text-white/60">© {new Date().getFullYear()} Computadores de la Costa</p>
+            </aside>
+
+            {/* Formulario */}
+            <main className="flex items-center justify-center px-6 py-12 sm:px-12">
+                <div className="w-full max-w-sm">
+                    <div className="lg:hidden mb-10 flex justify-center">
+                        <Image src="/logo.png" alt="Computadores de la Costa" width={220} height={80} className="h-14 w-auto object-contain" priority />
+                    </div>
+
+                    <div className="mb-8">
+                        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Iniciar sesión</h1>
+                        <p className="mt-1.5 text-sm text-gray-500">Ingresa tus credenciales para acceder al panel.</p>
                     </div>
 
                     {error && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <div className="flex items-center space-x-2">
-                                <div className="flex-shrink-0">
-                                    <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
-                                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                                        </svg>
-                                    </div>
-                                </div>
-                                <p className="text-red-800 text-sm font-medium">{error}</p>
-                            </div>
+                        <div
+                            role={isInfoMessage ? "status" : "alert"}
+                            className={`mb-6 flex items-start gap-3 rounded-lg border p-3 text-sm ${
+                                isInfoMessage
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                    : "border-red-200 bg-red-50 text-red-800"
+                            }`}
+                        >
+                            <svg className={`mt-0.5 h-4 w-4 shrink-0 ${isInfoMessage ? "text-emerald-600" : "text-red-600"}`} fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                            </svg>
+                            <p className="font-medium">{error}</p>
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-4">
-                            <div className="space-y-1">
-                                <label htmlFor="usuario" className="block text-sm font-medium text-gray-700">
-                                    Usuario
-                                </label>
-                                <div className="relative group">
-                                    <input
-                                        id="usuario"
-                                        name="usuario"
-                                        type="text"
-                                        required
-                                        value={credentials.usuario}
-                                        onChange={handleChange}
-                                        className="w-full px-4 py-3 pl-10 bg-white border border-gray-300 rounded-lg 
-                                                                                                     focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 
-                                                                                                     hover:border-red-400 transition-all duration-200 text-gray-900 placeholder-gray-500"
-                                        placeholder="Ingrese su usuario"
-                                        autoComplete="username"
-                                    />
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg className="h-5 w-5 text-gray-400 group-hover:text-red-500 group-focus-within:text-red-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                        </svg>
-                                    </div>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div className="space-y-1.5">
+                            <label htmlFor="usuario" className="block text-sm font-medium text-gray-700">
+                                Usuario
+                            </label>
+                            <div className="relative group">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <svg className="h-[18px] w-[18px] text-gray-400 transition-colors group-focus-within:text-[#b3162a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
                                 </div>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label htmlFor="contraseña" className="block text-sm font-medium text-gray-700">
-                                    Contraseña
-                                </label>
-                                <div className="relative group">
-                                    <input
-                                        id="contraseña"
-                                        name="contraseña"
-                                        type={showPassword ? "text" : "password"}
-                                        required
-                                        value={credentials.contraseña}
-                                        onChange={handleChange}
-                                        className="w-full px-4 py-3 pl-10 pr-10 bg-white border border-gray-300 rounded-lg 
-                                                                                                     focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 
-                                                                                                     hover:border-red-400 transition-all duration-200 text-gray-900 placeholder-gray-500"
-                                        placeholder="Ingrese su contraseña"
-                                        autoComplete="current-password"
-                                    />
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg className="h-5 w-5 text-gray-400 group-hover:text-red-500 group-focus-within:text-red-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={togglePasswordVisibility}
-                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-red-500 focus:text-red-600 focus:outline-none transition-colors duration-200"
-                                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                                    >
-                                        {showPassword ? (
-                                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                                            </svg>
-                                        ) : (
-                                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                            </svg>
-                                        )}
-                                    </button>
-                                </div>
+                                <input
+                                    id="usuario"
+                                    name="usuario"
+                                    type="text"
+                                    required
+                                    autoFocus
+                                    value={credentials.usuario}
+                                    onChange={handleChange}
+                                    className="h-11 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-3 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 transition focus:border-[#b3162a] focus:outline-none focus:ring-4 focus:ring-[#b3162a]/10"
+                                    placeholder="Tu usuario"
+                                    autoComplete="username"
+                                />
                             </div>
                         </div>
 
-                        <div className="pt-2">
-                            <button
-                                type="submit"
-                                disabled={isLoading || isTemporarilyDisabled}
-                                className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-red-200 disabled:cursor-not-allowed disabled:transform-none"
-                            >
-                                {isLoading ? (
-                                    <div className="flex items-center justify-center space-x-2">
-                                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        <div className="space-y-1.5">
+                            <label htmlFor="contraseña" className="block text-sm font-medium text-gray-700">
+                                Contraseña
+                            </label>
+                            <div className="relative group">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                    <svg className="h-[18px] w-[18px] text-gray-400 transition-colors group-focus-within:text-[#b3162a]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                </div>
+                                <input
+                                    id="contraseña"
+                                    name="contraseña"
+                                    type={showPassword ? "text" : "password"}
+                                    required
+                                    value={credentials.contraseña}
+                                    onChange={handleChange}
+                                    className="h-11 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-11 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 transition focus:border-[#b3162a] focus:outline-none focus:ring-4 focus:ring-[#b3162a]/10"
+                                    placeholder="••••••••"
+                                    autoComplete="current-password"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={togglePasswordVisibility}
+                                    className="absolute inset-y-0 right-0 flex items-center rounded-r-lg px-3 text-gray-400 transition-colors hover:text-gray-700 focus:outline-none focus-visible:text-[#b3162a]"
+                                    aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                                >
+                                    {showPassword ? (
+                                        <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
                                         </svg>
-                                        <span>Iniciando sesión...</span>
-                                    </div>
-                                ) : (
-                                    <span className="flex items-center justify-center space-x-2">
-                                        <span>Iniciar Sesión</span>
-                                        <svg className="w-4 h-4 transform group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                    ) : (
+                                        <svg className="h-[18px] w-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                         </svg>
-                                    </span>
-                                )}
-                            </button>
+                                    )}
+                                </button>
+                            </div>
                         </div>
+
+                        <button
+                            type="submit"
+                            disabled={isLoading || isTemporarilyDisabled}
+                            className="group flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#b3162a] px-4 text-sm font-semibold text-white shadow-sm shadow-[#b3162a]/30 transition hover:bg-[#9a1324] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#b3162a]/25 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-gray-300 disabled:shadow-none"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    Verificando...
+                                </>
+                            ) : (
+                                <>
+                                    Iniciar sesión
+                                    <svg className="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                    </svg>
+                                </>
+                            )}
+                        </button>
                     </form>
+
+                    <p className="mt-10 text-center text-xs text-gray-400">
+                        Acceso restringido a personal autorizado.
+                    </p>
                 </div>
-            </div>
+            </main>
         </div>
     );
 }
 
 function LoginSkeleton() {
     return (
-        <div className="h-screen bg-white flex items-center justify-center p-4">
-            <div className="relative w-full max-w-md">
-                <div className="bg-white/70 border border-gray-200 rounded-2xl p-8 space-y-6 backdrop-blur-sm">
-                    <div className="text-center space-y-4">
-                        <div className="mx-auto w-32 h-32 bg-gray-200 rounded-lg animate-pulse"></div>
-                        <div className="space-y-1">
-                            <div className="h-6 bg-gray-200 rounded-lg animate-pulse mx-auto w-40"></div>
-                            <div className="h-4 bg-gray-200 rounded animate-pulse mx-auto w-28"></div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="space-y-4">
-                            <div className="space-y-1">
-                                <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>
-                                <div className="h-12 bg-gray-200 rounded-lg animate-pulse"></div>
-                            </div>
-                            <div className="space-y-1">
-                                <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>
-                                <div className="h-12 bg-gray-200 rounded-lg animate-pulse"></div>
-                            </div>
-                        </div>
-
-                        <div className="h-12 bg-gray-300 rounded-lg animate-pulse"></div>
-                    </div>
+        <div className="min-h-screen grid lg:grid-cols-[1.1fr_1fr] bg-white">
+            <div className="hidden lg:block bg-gradient-to-br from-[#8f0f1d] via-[#b3162a] to-[#d42a3c]" />
+            <div className="flex items-center justify-center px-6">
+                <div className="w-full max-w-sm space-y-5 animate-pulse">
+                    <div className="h-7 w-40 rounded-md bg-gray-200" />
+                    <div className="h-4 w-64 rounded bg-gray-100" />
+                    <div className="h-11 rounded-lg bg-gray-100" />
+                    <div className="h-11 rounded-lg bg-gray-100" />
+                    <div className="h-11 rounded-lg bg-gray-200" />
                 </div>
             </div>
         </div>

@@ -1,7 +1,7 @@
 // api/admin/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { ensureAdmin } from '@/lib/auth';
+import { ensureAdmin, ensureStaff } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   const authError = await ensureAdmin(req);
@@ -121,6 +121,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await ensureStaff(req);
+  if (authError) return authError;
   try {
     const { idChat } = await req.json();
 

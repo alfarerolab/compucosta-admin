@@ -32,6 +32,7 @@ interface ProductAPI {
   id: number;
   idproducto: string;
   nombreproducto: string;
+  nombre_comercial?: string | null;
   lista1?: number;
   lista2?: number;
   lista2_activa?: boolean;
@@ -58,6 +59,7 @@ interface ProductAPI {
 interface ProductFormData {
   idproducto: string;
   nombreproducto: string;
+  nombre_comercial?: string;
   lista1: string;
   lista2: string;
   lista2_activa: boolean;
@@ -261,6 +263,7 @@ export default function EditProductPage({
         const productData: ProductFormData = {
           idproducto: data.idproducto,
           nombreproducto: data.nombreproducto,
+          nombre_comercial: data.nombre_comercial || "",
           lista1: data.lista1?.toString() || "",
           lista2: data.lista2?.toString() || "",
           lista2_activa: Boolean(data.lista2_activa),
@@ -307,7 +310,7 @@ export default function EditProductPage({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         <div className="text-xl">Cargando producto {productId}...</div>
       </div>
@@ -316,7 +319,7 @@ export default function EditProductPage({
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="text-xl text-red-500 font-bold">⚠️ Error</div>
         <div className="text-lg text-gray-700 max-w-md text-center">{error}</div>
         <div className="text-sm text-gray-500">ID solicitado: {productId}</div>
@@ -332,7 +335,7 @@ export default function EditProductPage({
 
   if (!product) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="text-xl text-red-500 font-bold">Producto no encontrado</div>
         <div className="text-sm text-gray-500">ID solicitado: {productId}</div>
         <button

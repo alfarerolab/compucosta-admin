@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { extraerNitDelPedido, mapearFormaPagoShopify } from "@/lib/facturacion-helpers";
-import { maskNit } from "@/lib/auth";
+import { maskNit, ensureStaff } from "@/lib/auth";
 
 const SHOPIFY_STORE = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_TOKEN = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
@@ -479,6 +479,8 @@ export async function GET(request: NextRequest) {
 
 // POST: Sincronizar pedidos a BD local (Autenticación opcional - solo para webhooks externos)
 export async function POST(request: NextRequest) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     console.log("🔄 POST /api/shopify/orders - Iniciando sincronización...");
 

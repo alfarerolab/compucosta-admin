@@ -29,7 +29,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { toast } from "sonner";
-import { X, Plus, ChevronRight } from "lucide-react";
+import { X, Plus, ChevronRight, Sparkles, Loader2 } from "lucide-react";
 
 // Interfaces actualizadas para categorías jerárquicas
 interface Marca {
@@ -90,6 +90,7 @@ const buildReturnUrl = (searchParams: URLSearchParams) => {
 const formSchema = z.object({
   idproducto: z.string().min(1, "ID del producto es obligatorio"),
   nombreproducto: z.string().min(1, "Nombre del producto es obligatorio"),
+  nombre_comercial: z.string().max(255, "Máximo 255 caracteres").optional(),
   lista1: z.string().min(1, "El precio es obligatorio"),
   lista2: z.string().optional(),
   lista2_activa: z.boolean().default(false),
@@ -159,6 +160,9 @@ export default function ProductForm({ initialData, onSaveSuccess }: ProductFormP
   const [uploadMethod, setUploadMethod] = useState<"url" | "file">("url");
   const [paquetes, setPaquetes] = useState<Paquete[]>([]);
   const [characteristics, setCharacteristics] = useState<{key: string, value: string}[]>([]);
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
+  const [aiUsedFeatures, setAiUsedFeatures] = useState<string[]>([]);
+  const [lastAiName, setLastAiName] = useState<string | null>(null);
 
   const isEditing = !!initialData?.idproducto;
 
@@ -176,6 +180,7 @@ export default function ProductForm({ initialData, onSaveSuccess }: ProductFormP
       : {
           idproducto: "",
           nombreproducto: "",
+          nombre_comercial: "",
           lista1: "",
           lista2: "",
           lista2_activa: false,
@@ -308,6 +313,33 @@ setPaquetes(paquetesData);
       setCharacteristics(parsedCharacteristics);
     }
   }, [form]);
+
+  // Agente IA (DeepSeek): propone el nombre comercial con las características actuales del formulario
+  const generateCommercialName = async () => {
+    const idproducto = form.getValues('idproducto');
+    if (!idproducto) return;
+    try {
+      setIsGeneratingName(true);
+      const res = await fetch(`/api/products/${encodeURIComponent(idproducto)}/nombre-comercial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          caracteristica: form.getValues('caracteristica') || '',
+          descripcion: form.getValues('descripcion') || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'No se pudo generar el nombre');
+      form.setValue('nombre_comercial', data.nombre_comercial, { shouldDirty: true, shouldValidate: true });
+      setAiUsedFeatures(data.caracteristicas_usadas || []);
+      setLastAiName(data.nombre_comercial);
+      toast.success('Nombre comercial generado', { description: 'Revísalo y guarda el producto para publicarlo.' });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Error al generar el nombre');
+    } finally {
+      setIsGeneratingName(false);
+    }
+  };
 
   const updateFormCharacteristics = (newCharacteristics: {key: string, value: string}[]) => {
     const formattedValue = newCharacteristics
@@ -481,6 +513,8 @@ setPaquetes(paquetesData);
       const isEditing = !!initialData?.idproducto;
 
       const commonData = {
+        nombre_comercial: data.nombre_comercial?.trim() || "",
+        nombre_comercial_origen: lastAiName && data.nombre_comercial?.trim() === lastAiName ? "ia" : "manual",
         descripcion: data.descripcion || "",
         caracteristica: data.caracteristica || "",
         slug: data.slug,
@@ -645,6 +679,62 @@ setPaquetes(paquetesData);
                     </FormControl>
                     {isEditing && (
                       <p className="text-xs text-muted-foreground">Gestionado por ERP</p>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                name="nombre_comercial"
+                control={form.control}
+                render={({ field }) => (
+                  <FormItem className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <FormLabel className="text-sm font-semibold">Nombre comercial</FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Es el nombre que verán los clientes en la tienda. Si está vacío se usa el nombre del ERP.
+                        </p>
+                      </div>
+                      {isEditing && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={generateCommercialName}
+                          disabled={isGeneratingName}
+                          className="border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                        >
+                          {isGeneratingName
+                            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            : <Sparkles className="mr-2 h-4 w-4" />}
+                          {isGeneratingName ? 'Generando...' : field.value ? 'Regenerar con IA' : 'Generar con IA'}
+                        </Button>
+                      )}
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        rows={2}
+                        maxLength={255}
+                        placeholder={form.getValues('nombreproducto') || 'Ej.: Portátil Lenovo IdeaPad 3 15.6" Ryzen 5, 8 GB RAM, 512 GB SSD'}
+                        className="resize-none bg-card"
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {aiUsedFeatures.map((feature) => (
+                          <Badge key={feature} variant="neutral" className="font-normal">{feature}</Badge>
+                        ))}
+                      </div>
+                      <span className={`text-xs tabular ${(field.value?.length ?? 0) > 150 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                        {field.value?.length ?? 0}/150 recomendados
+                      </span>
+                    </div>
+                    {!isEditing && (
+                      <p className="text-xs text-muted-foreground">Guarda el producto para poder generarlo con IA.</p>
                     )}
                     <FormMessage />
                   </FormItem>

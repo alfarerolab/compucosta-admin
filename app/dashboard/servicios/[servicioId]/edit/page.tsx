@@ -50,7 +50,7 @@ const EditServicioPage = () => {
   if (loading) {
     return (
       <div className="flex-col">
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4">
           <div className="flex items-center justify-center h-32">
             <p>Cargando servicio...</p>
           </div>
@@ -62,7 +62,7 @@ const EditServicioPage = () => {
   if (!servicio) {
     return (
       <div className="flex-col">
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4">
           <div className="flex items-center justify-center h-32">
             <p>Servicio no encontrado</p>
           </div>
@@ -73,7 +73,7 @@ const EditServicioPage = () => {
 
   return ( 
     <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex-1 space-y-4">
         <ServicioForm initialData={servicio} />
       </div>
     </div>

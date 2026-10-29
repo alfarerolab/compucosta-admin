@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prismadb from '@/lib/prismadb';
 
+import { ensureStaff } from "@/lib/auth";
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ categoriesId: string }> }
 ) {
+  const authError = await ensureStaff(request);
+  if (authError) return authError;
   try {
     const { activo } = await request.json();
     // Hacer await de params antes de usar sus propiedades

@@ -19,7 +19,10 @@ function verifyShopifyWebhook(body: string, hmacHeader: string): boolean {
     .update(body, 'utf8')
     .digest('base64');
   
-  return hash === hmacHeader;
+  // Comparación en tiempo constante (=== permitía ataques de temporización)
+  const a = Buffer.from(hash);
+  const b = Buffer.from(hmacHeader || '');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // Crear pedido en ERP externo
@@ -223,7 +226,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { 
         error: "Error procesando webhook",
-        details: error instanceof Error ? error.message : "Error desconocido"
+        details: process.env.NODE_ENV === "production" ? undefined : (error instanceof Error ? error.message : "Error desconocido")
       },
       { status: 500 }
     );

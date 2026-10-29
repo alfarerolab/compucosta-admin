@@ -103,36 +103,48 @@ const publicOrigins = [
   'https://www.compucosta.com',
 ];
 
-const PROTECTED_API_ROUTES = [
-  '/api/products',
-  '/api/categories',
-  '/api/colors',
-  '/api/marcas',
-  '/api/orders',
-  '/api/chat',
-  '/api/reviews',
-  '/api/user',
-  '/api/banners',
-  '/api/servicios',
-  '/api/contactos',
-  '/api/shopify',
-  '/api/upload',
-  '/api/facturacion',
-];
+// SEG-10 — Política "denegar por defecto": toda ruta /api exige sesión de admin salvo las listadas aquí.
+// (Antes solo se protegían las rutas de una lista, y rutas como /api/users, /api/admin/chat,
+//  /api/dashboard o las escrituras de /api/empresa y /api/paquetes quedaban abiertas.)
 
+// Sin sesión: tienen su propia autenticación (login, HMAC de Shopify, CRON_SECRET) o son de uso público
 const PUBLIC_API_ROUTES = [
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/register',
-  '/api/shopify/orders/create',
-  '/api/shopify/orders/update',
+  '/api/shopify/orders/create',   // HMAC en la ruta (incluye /create/updated)
+  '/api/shopify/orders/update',   // HMAC en la ruta
+  '/api/webhook/shopify',         // HMAC en la ruta
+  '/api/cron/erp-sync',           // CRON_SECRET en la ruta
+  '/api/whatsapp',                // usado por la tienda; limitado por IP y validado en la ruta
 ];
+
+// Catálogo que la tienda pública lee por GET desde su origen (comportamiento previo conservado)
+const STOREFRONT_READ_ROUTES = [
+  '/api/products',
+  '/api/categories',
+  '/api/colors',
+  '/api/marcas',
+  '/api/banners',
+  '/api/reviews',
+  '/api/servicios',
+  '/api/contactos',
+];
+
+// Rutas que antes eran totalmente abiertas y que la tienda puede leer: la lectura sigue abierta,
+// la escritura ahora exige sesión
+const OPEN_READ_ROUTES = [
+  '/api/empresa',
+  '/api/paquetes',
+];
+
+// Subrutas de catálogo que ejecutan acciones administrativas aunque sean GET (sincronizaciones, IA...)
+const ADMIN_ONLY_SEGMENTS = ['sync', 'verify', 'nombre-comercial'];
 
 async function verifyToken(token: string): Promise<{ valid: boolean; expired?: boolean; decoded?: any }> {
   try {
     debugLog('🔍 [MIDDLEWARE] Verificando token (Edge Runtime compatible)');
-    const { payload } = await jwtVerify(token, secret);
-    debugLog('✅ [MIDDLEWARE] Token decodificado correctamente:', payload);
+    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
     return { valid: true, decoded: payload };
   } catch (error: any) {
     console.error('❌ [MIDDLEWARE] Error al verificar token:', error.message);
@@ -143,16 +155,26 @@ async function verifyToken(token: string): Promise<{ valid: boolean; expired?: b
   }
 }
 
-function isProtectedApiRoute(pathname: string): boolean {
-  return PROTECTED_API_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(route + '/')
-  );
+function matchesRoute(pathname: string, routes: string[]): boolean {
+  return routes.some((route) => pathname === route || pathname.startsWith(route + '/'));
+}
+
+function isAdminOnlySubpath(pathname: string): boolean {
+  return pathname.split('/').some((segment) => ADMIN_ONLY_SEGMENTS.includes(segment));
+}
+
+// Lectura de catálogo para la tienda (GET desde el origen público)
+function isStorefrontReadable(pathname: string, method: string): boolean {
+  return method === 'GET' && matchesRoute(pathname, STOREFRONT_READ_ROUTES) && !isAdminOnlySubpath(pathname);
+}
+
+// Lectura abierta sin importar el origen (rutas que ya eran públicas)
+function isOpenRead(pathname: string, method: string): boolean {
+  return method === 'GET' && matchesRoute(pathname, OPEN_READ_ROUTES);
 }
 
 function isPublicApiRoute(pathname: string): boolean {
-  return PUBLIC_API_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(route + '/')
-  );
+  return matchesRoute(pathname, PUBLIC_API_ROUTES);
 }
 
 function isPublicOrigin(origin: string | null): boolean {
@@ -172,15 +194,46 @@ if (!probeRateStore._probeRateStore) {
   probeRateStore._probeRateStore = new Map<string, ProbeRateEntry>();
 }
 
+// SEG-11 — IP del cliente para rate limiting. El primer valor de X-Forwarded-For lo controla el
+// cliente (rotándolo se esquivaba el límite); se usa X-Real-IP (lo fija nginx) o el último salto,
+// que es el que añade nuestro proxy.
 function getClientIp(request: NextRequest): string {
-  const xff = request.headers.get('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
   const xri = request.headers.get('x-real-ip');
   if (xri) return xri.trim();
+  const xff = request.headers.get('x-forwarded-for');
+  if (xff) {
+    const last = xff.split(',').map((v) => v.trim()).filter(Boolean).pop();
+    if (last) return last;
+  }
   return 'unknown';
+}
+
+// SEG-12 — Límites estrictos para rutas sensibles a fuerza bruta o abuso
+const SENSITIVE_LIMITS: Array<{ path: string; method: string; max: number; windowMs: number; message: string }> = [
+  { path: '/api/auth/login', method: 'POST', max: Number(process.env.LOGIN_RL_MAX || 20), windowMs: 10 * 60_000, message: 'Demasiados intentos de inicio de sesión. Espera unos minutos e inténtalo de nuevo.' },
+  { path: '/api/auth/cambiarContrasena', method: 'POST', max: 10, windowMs: 10 * 60_000, message: 'Demasiados intentos. Espera unos minutos.' },
+  { path: '/api/whatsapp', method: 'POST', max: Number(process.env.WHATSAPP_RL_MAX || 10), windowMs: 10 * 60_000, message: 'Demasiados mensajes enviados. Inténtalo más tarde.' },
+];
+
+const sensitiveStore = globalThis as unknown as { _sensitiveRate?: Map<string, number[]> };
+if (!sensitiveStore._sensitiveRate) sensitiveStore._sensitiveRate = new Map<string, number[]>();
+
+function checkSensitiveLimit(pathname: string, method: string, ip: string): { limited: boolean; message?: string; retryAfter?: number } {
+  const rule = SENSITIVE_LIMITS.find((r) => r.path === pathname && r.method === method);
+  if (!rule) return { limited: false };
+  const now = Date.now();
+  const key = `${rule.path}|${ip}`;
+  const store = sensitiveStore._sensitiveRate!;
+  const hits = (store.get(key) ?? []).filter((ts) => now - ts < rule.windowMs);
+  hits.push(now);
+  store.set(key, hits);
+  if (store.size > 10000) {
+    store.forEach((v, k) => { if (!v.some((ts) => now - ts < 15 * 60_000)) store.delete(k); });
+  }
+  if (hits.length > rule.max) {
+    return { limited: true, message: rule.message, retryAfter: Math.ceil((rule.windowMs - (now - hits[0])) / 1000) };
+  }
+  return { limited: false };
 }
 
 function registerProbeHit(ip: string): { limited: boolean; hitsInWindow: number } {
@@ -258,8 +311,7 @@ export async function proxy(request: NextRequest) {
   // DEBUG: show route classification to diagnose unexpected 401 on public routes
   try {
     const debugIsPublic = isPublicApiRoute(pathname);
-    const debugIsProtected = isProtectedApiRoute(pathname);
-    debugLog(`🔍 [MIDDLEWARE DEBUG] pathname='${pathname}' isPublic=${debugIsPublic} isProtected=${debugIsProtected}`);
+    debugLog(`🔍 [MIDDLEWARE DEBUG] pathname='${pathname}' isPublic=${debugIsPublic}`);
   } catch (e) {
     console.error('🔍 [MIDDLEWARE DEBUG] Error computing route flags:', e);
   }
@@ -282,7 +334,7 @@ export async function proxy(request: NextRequest) {
       response.headers.append('Access-Control-Allow-Origin', origin);
       response.headers.append(
         'Access-Control-Allow-Methods',
-        'GET, POST, PUT, DELETE, PATCH, OPTIONS, CONNECT'
+        'GET, POST, PUT, DELETE, PATCH, OPTIONS'
       );
       response.headers.append(
         'Access-Control-Allow-Headers',
@@ -412,94 +464,112 @@ export async function proxy(request: NextRequest) {
 
     // Cron-triggering via HTTP removed; PM2 cron_restart handles scheduling (SYNC-04)
 
+    const withCors = (res: NextResponse) => {
+      if (origin && allowedOrigins.includes(origin)) {
+        res.headers.set('Access-Control-Allow-Credentials', 'true');
+        res.headers.set('Access-Control-Allow-Origin', origin);
+      }
+      applySecurityHeaders(res);
+      return res;
+    };
+
+    const sensitive = checkSensitiveLimit(pathname, method, clientIp);
+    if (sensitive.limited) {
+      console.warn(`[MIDDLEWARE] Límite sensible alcanzado ip=${clientIp} path=${pathname}`);
+      const limited = NextResponse.json({ error: 'TOO_MANY_REQUESTS', message: sensitive.message }, { status: 429 });
+      limited.headers.set('Retry-After', String(sensitive.retryAfter ?? 60));
+      return withCors(limited);
+    }
+
     if (isPublicApiRoute(pathname)) {
       debugLog('🔓 [MIDDLEWARE] Ruta API pública:', pathname);
       return response;
     }
 
-    if (isProtectedApiRoute(pathname)) {
-      debugLog('🔐 [MIDDLEWARE] Ruta API protegida:', pathname);
-
-      if (isPublicOrigin(origin)) {
-        // Allow public ecommerce origin to POST reviews (external storefront)
-        // while keeping other protected routes read-only for public origins.
-        if (pathname === '/api/reviews' && (method === 'GET' || method === 'POST')) {
-          debugLog('✅ [MIDDLEWARE] Ecommerce público permitiendo', method, 'a:', pathname);
-          if (origin && allowedOrigins.includes(origin)) {
-            response.headers.set('Access-Control-Allow-Credentials', 'true');
-            response.headers.set('Access-Control-Allow-Origin', origin);
-          }
-          return response;
-        }
-
-        if (method === 'GET') {
-          debugLog('✅ [MIDDLEWARE] Ecommerce público accediendo con GET:', pathname);
-          return response;
-        } else {
-          debugLog('❌ [MIDDLEWARE] Ecommerce intenta usar método restringido:', method);
-          const errorResponse = NextResponse.json(
-            { error: 'FORBIDDEN', message: 'Solo se permite lectura desde este origen' },
-            { status: 403 }
-          );
-          if (origin && allowedOrigins.includes(origin)) {
-            errorResponse.headers.set('Access-Control-Allow-Credentials', 'true');
-            errorResponse.headers.set('Access-Control-Allow-Origin', origin);
-          }
-          return errorResponse;
-        }
-      }
-
-      const token =
-        request.cookies.get('token')?.value ||
-        request.headers.get('Authorization')?.replace('Bearer ', '');
-
-      if (!token) {
-        debugLog('❌ [MIDDLEWARE API] Sin token, acceso denegado a:', pathname, method);
-        const errorResponse = NextResponse.json(
-          { error: 'UNAUTHORIZED', message: 'Se requiere autenticación para acceder a este recurso' },
-          { status: 401 }
-        );
-        if (origin && allowedOrigins.includes(origin)) {
-          errorResponse.headers.set('Access-Control-Allow-Credentials', 'true');
-          errorResponse.headers.set('Access-Control-Allow-Origin', origin);
-        }
-        return errorResponse;
-      }
-
-      const tokenVerification = await verifyToken(token);
-
-      if (!tokenVerification.valid) {
-        debugLog('❌ [MIDDLEWARE API] Token inválido o expirado:', pathname, method);
-        const errorResponse = NextResponse.json(
-          {
-            error: tokenVerification.expired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
-            message: tokenVerification.expired
-              ? 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.'
-              : 'Token inválido',
-          },
-          { status: 401 }
-        );
-        if (origin && allowedOrigins.includes(origin)) {
-          errorResponse.headers.set('Access-Control-Allow-Credentials', 'true');
-          errorResponse.headers.set('Access-Control-Allow-Origin', origin);
-        }
-        if (tokenVerification.expired) {
-          errorResponse.cookies.set('token', '', {
-            maxAge: 0,
-            path: '/',
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-          });
-        }
-        return errorResponse;
-      }
-
-      debugLog('✅ [MIDDLEWARE API] Token válido, acceso permitido a:', pathname, method);
-      debugLog('👤 [MIDDLEWARE API] Usuario:', tokenVerification.decoded?.email || tokenVerification.decoded?.username);
-    } else {
-      debugLog('🔓 [MIDDLEWARE] Ruta API pública:', pathname);
+    if (isOpenRead(pathname, method)) {
+      debugLog('🔓 [MIDDLEWARE] Lectura abierta:', pathname);
+      return response;
     }
+
+    const token =
+      request.cookies.get('token')?.value ||
+      request.headers.get('Authorization')?.replace('Bearer ', '');
+
+    // Tienda pública (origen compucosta.com) sin sesión de admin
+    if (!token && isPublicOrigin(origin)) {
+      // Reseñas: la tienda las lee y las publica
+      if (pathname === '/api/reviews' && (method === 'GET' || method === 'POST')) {
+        debugLog('✅ [MIDDLEWARE] Ecommerce público permitiendo', method, 'a:', pathname);
+        return withCors(response);
+      }
+
+      // Chat del cliente: solo puede consultar SU conversación (por idChat), nunca el listado de todas
+      if (
+        method === 'GET' &&
+        (pathname === '/api/chat/exists' ||
+          (pathname === '/api/chat' && !!request.nextUrl.searchParams.get('idChat') &&
+            request.nextUrl.searchParams.get('unreadCountOnly') !== 'true'))
+      ) {
+        return withCors(response);
+      }
+
+      // Pedidos del cliente ("Mis pedidos"): solo filtrados por su email o por id de pedido,
+      // nunca el listado completo de todos los clientes
+      if (
+        method === 'GET' &&
+        ((pathname === '/api/orders' && !!request.nextUrl.searchParams.get('email')?.trim()) ||
+          /^\/api\/orders\/[^/]+$/.test(pathname))
+      ) {
+        return withCors(response);
+      }
+
+      if (isStorefrontReadable(pathname, method)) {
+        debugLog('✅ [MIDDLEWARE] Ecommerce público accediendo con GET:', pathname);
+        return response;
+      }
+
+      debugLog('❌ [MIDDLEWARE] Ecommerce sin permiso para:', method, pathname);
+      return withCors(NextResponse.json(
+        { error: 'FORBIDDEN', message: 'Solo se permite lectura desde este origen' },
+        { status: 403 }
+      ));
+    }
+
+    // Resto de rutas /api: sesión de admin obligatoria
+    if (!token) {
+      debugLog('❌ [MIDDLEWARE API] Sin token, acceso denegado a:', pathname, method);
+      return withCors(NextResponse.json(
+        { error: 'UNAUTHORIZED', message: 'Se requiere autenticación para acceder a este recurso' },
+        { status: 401 }
+      ));
+    }
+
+    const tokenVerification = await verifyToken(token);
+
+    if (!tokenVerification.valid) {
+      debugLog('❌ [MIDDLEWARE API] Token inválido o expirado:', pathname, method);
+      const errorResponse = NextResponse.json(
+        {
+          error: tokenVerification.expired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
+          message: tokenVerification.expired
+            ? 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.'
+            : 'Token inválido',
+        },
+        { status: 401 }
+      );
+      if (tokenVerification.expired) {
+        errorResponse.cookies.set('token', '', {
+          maxAge: 0,
+          path: '/',
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+        });
+      }
+      return withCors(errorResponse);
+    }
+
+    debugLog('✅ [MIDDLEWARE API] Token válido, acceso permitido a:', pathname, method);
 
     return response;
   }
@@ -513,9 +583,6 @@ export async function proxy(request: NextRequest) {
   const isExpiredRequest = request.nextUrl.searchParams.has('expired');
 
   debugLog('🔐 [MIDDLEWARE] Token presente:', !!token);
-  if (token) {
-    debugLog('🔑 [MIDDLEWARE] Token (primeros 20 chars):', token.substring(0, 20) + '...');
-  }
 
   if ((isLogoutRequest || isExpiredRequest) && pathname === '/login') {
     debugLog('✅ [MIDDLEWARE] Acceso a login con parámetros especiales');
@@ -573,7 +640,7 @@ export async function proxy(request: NextRequest) {
       return redirectResponse;
     }
 
-    debugLog('✅ [MIDDLEWARE] Token válido, usuario:', tokenVerification.decoded);
+    debugLog('✅ [MIDDLEWARE] Token válido');
 
     if (pathname === '/login' || pathname === '/') {
       debugLog('🔄 [MIDDLEWARE] Usuario autenticado, redirigiendo a dashboard');

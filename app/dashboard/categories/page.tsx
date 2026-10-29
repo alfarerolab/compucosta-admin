@@ -1,5 +1,6 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +17,8 @@ import {
   ChevronRight,
   Folder,
   FolderOpen,
-  FileText
+  FileText,
+  Tags
 } from "lucide-react";
 import CategoryForm from "@/components/forms/category-form";
 import { 
@@ -387,7 +389,7 @@ export default function CategoriesPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-[60vh]">
         <div className="text-lg">Cargando categorías...</div>
       </div>
     );
@@ -399,7 +401,7 @@ export default function CategoriesPage() {
   const childCategories = categories.filter(cat => cat.padre_id !== null).length;
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-4 sm:space-y-6">
       {notification && (
         <Alert 
           variant={notification.type === "error" ? "destructive" : "default"}
@@ -411,23 +413,23 @@ export default function CategoriesPage() {
       )}
 
       {/* Header con título y estadísticas */}
-      <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
-        <div className="flex flex-col space-y-3 lg:flex-row lg:items-center lg:space-y-0 lg:space-x-4">
-          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Gestión de Categorías</h2>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-3">
+          <PageTitle title="Categorías" icon={Tags} description="Organiza el catálogo en categorías y subcategorías" />
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="bg-blue-50 text-xs sm:text-sm">
+            <Badge variant="neutral">
               {categories.length} total
             </Badge>
-            <Badge variant="default" className="bg-green-100 text-green-800 text-xs sm:text-sm">
+            <Badge variant="success">
               {activeCategories} activas
             </Badge>
-            <Badge variant="secondary" className="bg-red-100 text-red-800 text-xs sm:text-sm">
+            <Badge variant="danger">
               {inactiveCategories} inactivas
             </Badge>
-            <Badge variant="outline" className="bg-purple-50 text-xs sm:text-sm">
+            <Badge variant="neutral">
               {parentCategories} principales
             </Badge>
-            <Badge variant="outline" className="bg-orange-50 text-xs sm:text-sm">
+            <Badge variant="neutral">
               {childCategories} subcategorías
             </Badge>
           </div>

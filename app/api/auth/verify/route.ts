@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'tu-clave-secreta';
+import { getJwtSecret, JWT_ALGORITHM } from '@/lib/jwt-secret';
 
 export async function POST(request: Request) {
     const headers = {
@@ -23,7 +22,7 @@ export async function POST(request: Request) {
         }
 
         try {
-            const decoded = jwt.verify(token, JWT_SECRET);
+            const decoded = jwt.verify(token, getJwtSecret(), { algorithms: [JWT_ALGORITHM] });
             return new NextResponse(
                 JSON.stringify({ 
                     valid: true,

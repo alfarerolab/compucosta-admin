@@ -51,7 +51,7 @@ const EditEmpresaPage = () => {
   if (loading) {
     return (
       <div className="flex-col">
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4">
           <div className="flex items-center justify-center h-32">
             <p>Cargando información...</p>
           </div>
@@ -63,7 +63,7 @@ const EditEmpresaPage = () => {
   if (!informacion) {
     return (
       <div className="flex-col">
-        <div className="flex-1 space-y-4 p-8 pt-6">
+        <div className="flex-1 space-y-4">
           <div className="flex items-center justify-center h-32">
             <p>Información no encontrada</p>
           </div>
@@ -74,7 +74,7 @@ const EditEmpresaPage = () => {
 
   return ( 
     <div className="flex-col">
-      <div className="flex-1 space-y-4 p-8 pt-6">
+      <div className="flex-1 space-y-4">
         <EmpresaForm initialData={informacion} />
       </div>
     </div>

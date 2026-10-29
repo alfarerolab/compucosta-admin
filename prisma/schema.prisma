@@ -116,6 +116,12 @@ model TipoPaquete {
     id                Int      @id @default(autoincrement())
     idproducto        String   @unique
     nombreproducto    String  
+    // Nombre de cara al cliente (tienda/Shopify). Lo genera el agente IA o se edita a mano;
+    // la sincronización ERP nunca lo sobrescribe (nombreproducto sigue siendo el nombre interno ERP)
+    nombre_comercial              String?   @db.VarChar(255)
+    nombre_comercial_generado_at  DateTime?
+    // 'ia' | 'manual': los nombres escritos a mano nunca los regenera el agente en lote
+    nombre_comercial_origen       String?   @db.VarChar(10)
     lista1            Decimal? @db.Decimal(10, 2)
     lista2            Decimal? @db.Decimal(10, 2)
     lista2_activa     Boolean  @default(false)  

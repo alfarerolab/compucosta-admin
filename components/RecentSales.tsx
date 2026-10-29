@@ -1,5 +1,5 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 
 interface RecentSalesProps {
   orders?: Array<{
@@ -39,22 +39,6 @@ export function RecentSales({ orders = [] }: RecentSalesProps) {
       .slice(0, 2);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'completado':
-      case 'entregado':
-        return 'bg-green-100 text-green-700';
-      case 'pendiente':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'cancelado':
-        return 'bg-red-100 text-red-700';
-      case 'procesando':
-        return 'bg-blue-100 text-blue-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
   if (orders.length === 0) {
     return (
       <div className="flex items-center justify-center h-32">
@@ -64,15 +48,15 @@ export function RecentSales({ orders = [] }: RecentSalesProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="-mx-2 divide-y">
       {orders.map((order) => (
-        <div key={order.id} className="flex items-center">
+        <div key={order.id} className="flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-muted/40">
           <Avatar className="h-9 w-9">
-            <AvatarFallback className="text-xs">
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
               {getInitials(order.usuario)}
             </AvatarFallback>
           </Avatar>
-          <div className="ml-4 space-y-1 flex-1">
+          <div className="space-y-1 flex-1 min-w-0">
             <p className="text-sm font-medium leading-none truncate">
               {order.usuario}
             </p>
@@ -80,16 +64,11 @@ export function RecentSales({ orders = [] }: RecentSalesProps) {
               <p className="text-xs text-muted-foreground">
                 {formatDate(order.fecha)}
               </p>
-              <Badge
-                variant="secondary"
-                className={`text-xs ${getStatusColor(order.estado)}`}
-              >
-                {order.estado}
-              </Badge>
+              <StatusBadge status={order.estado} />
             </div>
           </div>
           <div className="text-right">
-            <div className="font-medium text-sm">
+            <div className="font-semibold text-sm tabular">
               {formatCurrency(order.total)}
             </div>
             <p className="text-xs text-muted-foreground">

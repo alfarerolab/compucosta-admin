@@ -61,7 +61,7 @@ export function Overview({ data = defaultData }: OverviewProps) {
             )}
             {isFutureMonth && (
               <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                Proyección
+                Sin datos aún
               </span>
             )}
           </div>
@@ -102,10 +102,10 @@ export function Overview({ data = defaultData }: OverviewProps) {
         </div>
       </div>
 
-      {/* Gráfico */}
-      <ResponsiveContainer width="100%" height={350}>
-        <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+      {/* Gráfico: cada serie con su propio eje, porque ingresos (millones) y pedidos (unidades) no comparten escala */}
+      <ResponsiveContainer width="100%" height={320}>
+        <BarChart data={data} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" opacity={0.3} vertical={false} />
           <XAxis
             dataKey="name"
             stroke="#888888"
@@ -114,10 +114,12 @@ export function Overview({ data = defaultData }: OverviewProps) {
             axisLine={false}
           />
           <YAxis
-            stroke="#888888"
+            yAxisId="ingresos"
+            stroke="#10b981"
             fontSize={12}
             tickLine={false}
             axisLine={false}
+            width={48}
             tickFormatter={(value) => {
               if (value >= 1000000) {
                 return `${(value / 1000000).toFixed(1)}M`;
@@ -128,42 +130,43 @@ export function Overview({ data = defaultData }: OverviewProps) {
               return value.toString();
             }}
           />
-          <Tooltip content={<CustomTooltip />} />
+          <YAxis
+            yAxisId="pedidos"
+            orientation="right"
+            stroke="#3b82f6"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            width={36}
+          />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)' }} />
           <Legend 
-            wrapperStyle={{ paddingTop: '20px' }}
+            wrapperStyle={{ paddingTop: '12px' }}
             formatter={(value, entry) => (
               <span style={{ color: entry.color, fontWeight: 500 }}>
-                {value === 'ingresos' ? `Ingresos (${formatCurrency(totalIngresos)})` : 
-                 value === 'pedidos' ? `Pedidos (${formatNumber(totalPedidos)})` : value}
+                {value === 'ingresos' ? 'Ingresos' : value === 'pedidos' ? 'Pedidos' : value}
               </span>
             )}
           />
           <Bar
+            yAxisId="ingresos"
             dataKey="ingresos"
             fill="#10b981"
             radius={[4, 4, 0, 0]}
             name="ingresos"
+            maxBarSize={28}
           />
           <Bar
+            yAxisId="pedidos"
             dataKey="pedidos"
             fill="#3b82f6"
             radius={[4, 4, 0, 0]}
             name="pedidos"
+            maxBarSize={28}
           />
         </BarChart>
       </ResponsiveContainer>
-
-      {/* Indicadores de mes actual */}
-      <div className="flex justify-center gap-4 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-blue-100 rounded"></div>
-          <span>Mes actual</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-gray-100 rounded"></div>
-          <span>Meses futuros (proyección)</span>
-        </div>
-      </div>
     </div>
   );
 }

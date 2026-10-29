@@ -6,7 +6,7 @@ import ProductosPageContent from "./ProductosPageContent";
 // Componente de carga
 function ProductosPageSkeleton() {
   return (
-    <div className="space-y-6 p-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <div className="h-8 w-64 bg-gray-200 rounded animate-pulse"></div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { PageTitle, pageHeaderLayout } from "@/components/shared/page-header";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Trash, RefreshCw, CheckCircle, Search, Filter, X, Zap, ShoppingBag, Clock } from "lucide-react";
+import { Pencil, Trash, RefreshCw, CheckCircle, Search, Filter, X, Zap, ShoppingBag, Clock, Sparkles, Square } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import Pagination from "@/components/ui/pagination";
@@ -26,6 +27,8 @@ import Pagination from "@/components/ui/pagination";
 interface Producto {
   idproducto: string;
   nombreproducto: string;
+  nombre_comercial?: string | null;
+  nombre_comercial_origen?: 'ia' | 'manual' | null;
   lista1?: number;
   lista2?: number;
   lista2_activa?: boolean;
@@ -112,6 +115,10 @@ export default function ProductosPageContent() {
   const [filtroVisibilidad, setFiltroVisibilidad] = useState<'todos' | 'visibles' | 'ocultos'>('todos');
   const [shopifySyncing, setShopifySyncing] = useState(false);
   const [shopifyStats, setShopifyStats] = useState<any>(null);
+  // Agente IA de nombres comerciales (DeepSeek)
+  const [aiStatus, setAiStatus] = useState<{ configurado: boolean; pendientes: number } | null>(null);
+  const [aiRunning, setAiRunning] = useState(false);
+  const aiCancelRef = useRef(false);
 
   // Paginación del servidor
   const [page, setPage]                   = useState(Math.max(1, parseInt(searchParams.get('page') || '1')));
@@ -183,6 +190,89 @@ export default function ProductosPageContent() {
       }
     } catch (error) {
       console.error('Error obteniendo stats de Shopify:', error);
+    }
+  };
+
+  const fetchAiStatus = async () => {
+    try {
+      const res = await fetch('/api/products/nombre-comercial');
+      if (res.ok) setAiStatus(await res.json());
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchAiStatus();
+  }, []);
+
+  // Genera nombres comerciales en tandas de 20 hasta terminar, detenerse por error de cuenta o cancelar
+  const handleGenerarNombresIA = async () => {
+    if (aiRunning) {
+      aiCancelRef.current = true;
+      return;
+    }
+    if (!aiStatus?.configurado) {
+      toast.error('El agente IA no está configurado', { description: 'Falta DEEPSEEK_API_KEY en el servidor.' });
+      return;
+    }
+    if (!aiStatus.pendientes) {
+      toast.info('Todos los productos activos ya tienen nombre comercial');
+      return;
+    }
+    if (!confirm(`¿Generar nombres comerciales con IA para ${aiStatus.pendientes} productos sin nombre?
+
+Se guardarán y quedarán listos para sincronizar con Shopify. Puedes revisarlos y editarlos después.`)) return;
+
+    aiCancelRef.current = false;
+    setAiRunning(true);
+    const toastId = toast.loading('Generando nombres comerciales...', { description: 'Preparando...' });
+    let generados = 0;
+    let errores = 0;
+
+    try {
+      while (!aiCancelRef.current) {
+        const res = await fetch('/api/products/nombre-comercial', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limite: 20 }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error en el agente IA');
+
+        generados += data.generados;
+        errores += data.errores;
+        setAiStatus((prev) => (prev ? { ...prev, pendientes: data.pendientes } : prev));
+
+        // Reflejar en la tabla los nombres nuevos sin recargar
+        const nuevos = new Map<string, string>(
+          data.resultados.filter((r: any) => r.nombre_comercial).map((r: any) => [r.idproducto, r.nombre_comercial])
+        );
+        if (nuevos.size > 0) {
+          setProductos((prev) => prev.map((p) => (nuevos.has(p.idproducto) ? { ...p, nombre_comercial: nuevos.get(p.idproducto), nombre_comercial_origen: 'ia' } : p)));
+        }
+
+        toast.loading('Generando nombres comerciales...', {
+          id: toastId,
+          description: `${generados} generados · ${data.pendientes} pendientes${errores ? ` · ${errores} con error` : ''}`,
+        });
+
+        if (data.detenido) throw new Error(data.detenido);
+        // Sin avances (todos fallaron) o sin pendientes: terminar para no entrar en bucle
+        if (data.pendientes === 0 || data.procesados === 0 || data.generados === 0) break;
+      }
+
+      toast.success(aiCancelRef.current ? 'Generación detenida' : 'Nombres comerciales generados', {
+        id: toastId,
+        description: `${generados} productos actualizados${errores ? `, ${errores} con error` : ''}. Sincroniza con Shopify para publicarlos.`,
+      });
+    } catch (error) {
+      toast.error('Error generando nombres', {
+        id: toastId,
+        description: `${error instanceof Error ? error.message : 'Error desconocido'}${generados ? ` (${generados} sí se generaron)` : ''}`,
+      });
+    } finally {
+      setAiRunning(false);
+      aiCancelRef.current = false;
+      fetchAiStatus();
     }
   };
 
@@ -559,7 +649,7 @@ export default function ProductosPageContent() {
   // Solo mostrar pantalla completa en la primera carga, nunca en recargas
   if (isInitialLoad && loading) {
     return (
-      <div className="flex flex-col justify-center items-center min-h-screen">
+      <div className="flex flex-col justify-center items-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
         <div className="text-lg font-medium">Cargando productos...</div>
         <div className="text-sm text-gray-500 mt-2">Esto puede tomar unos segundos</div>
@@ -568,30 +658,31 @@ export default function ProductosPageContent() {
   }
 
 return (
-  <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 lg:p-8">
+  <div className="space-y-4 sm:space-y-6">
     {/* Header */}
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex-1">
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Gestión de Productos</h2>
-        <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-4 mt-2">
-          <p className="text-sm text-gray-500">
-            {productos.length} de {totalServerItems} productos
-          </p>
-          {lastSync && (
-            <p className="text-sm text-gray-500">
-              Última sync: {lastSync.toLocaleString()}
-            </p>
-          )}
-
-          {shopifyStats && (
-            <p className="text-sm text-purple-600 font-medium">
-              🛒 {shopifyStats.sincronizados}/{shopifyStats.total}
-              {shopifyStats.necesitan_actualizacion > 0 && (
-                <span className="text-orange-600"> • {shopifyStats.necesitan_actualizacion} pend.</span>
+        <PageTitle
+          title="Productos"
+          icon={ShoppingBag}
+          description={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span><span className="font-medium text-foreground tabular">{productos.length}</span> de <span className="tabular">{totalServerItems}</span> productos</span>
+              {lastSync && (
+                <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Sync {lastSync.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</span>
               )}
-            </p>
-          )}
-        </div>
+              {shopifyStats && (
+                <span className="inline-flex items-center gap-1">
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  Shopify <span className="tabular">{shopifyStats.sincronizados}/{shopifyStats.total}</span>
+                  {shopifyStats.necesitan_actualizacion > 0 && (
+                    <span className="text-amber-700">· {shopifyStats.necesitan_actualizacion} pendientes</span>
+                  )}
+                </span>
+              )}
+            </span>
+          }
+        />
       </div>
 
       {/* Búsqueda Principal (Siempre visible) */}
@@ -606,7 +697,7 @@ return (
           )}
           <Input
             ref={searchInputRef}
-            placeholder="Buscar por nombre o ID del producto..."
+            placeholder="Buscar por nombre, nombre comercial o ID..."
             value={searchInput}
             onChange={(e) => handleBusquedaChange(e.target.value)}
             className="pl-10 pr-10 bg-white"
@@ -635,6 +726,24 @@ return (
         >
           <Filter className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Filtros</span>
+        </Button>
+
+        {/* Agente IA: nombres comerciales */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleGenerarNombresIA}
+          disabled={!aiStatus}
+          className={aiRunning ? "border-primary text-primary" : "border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"}
+          title={aiStatus?.configurado ? "Generar nombres comerciales con IA para los productos que no tienen" : "Configura DEEPSEEK_API_KEY para activar el agente IA"}
+        >
+          {aiRunning ? <Square className="h-3.5 w-3.5 sm:mr-2 fill-current" /> : <Sparkles className="h-4 w-4 sm:mr-2" />}
+          <span className="hidden sm:inline">{aiRunning ? 'Detener' : 'Nombres IA'}</span>
+          {!aiRunning && !!aiStatus?.pendientes && (
+            <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 text-[11px] font-semibold tabular">
+              {aiStatus.pendientes > 999 ? '999+' : aiStatus.pendientes}
+            </span>
+          )}
         </Button>
 
         {/* Shopify Sync */}
@@ -888,7 +997,7 @@ return (
     ) : (
       <>
         {/* Tabla - Con scroll horizontal en móviles */}
-        <div className="rounded-md border overflow-x-auto">
+        <div className="rounded-xl border bg-card shadow-card overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -923,7 +1032,30 @@ return (
                     )}
                   </TableCell>
                   <TableCell className="font-mono text-xs">{producto.idproducto}</TableCell>
-                  <TableCell className="font-medium">{producto.nombreproducto}</TableCell>
+                  <TableCell className="max-w-[360px]">
+                    {producto.nombre_comercial ? (
+                      <>
+                        <div className="font-medium text-foreground leading-snug">
+                          {producto.nombre_comercial}
+                          {producto.nombre_comercial_origen === 'ia' && (
+                            <span className="ml-1.5 inline-flex translate-y-[-1px] items-center gap-0.5 rounded bg-primary/[0.07] px-1 py-px align-middle text-[10px] font-semibold text-primary" title="Generado con IA">
+                              <Sparkles className="h-2.5 w-2.5" /> IA
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground truncate" title="Nombre interno ERP">
+                          ERP: {producto.nombreproducto}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-medium leading-snug">{producto.nombreproducto}</div>
+                        <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-amber-700">
+                          <Sparkles className="h-3 w-3" /> Sin nombre comercial
+                        </div>
+                      </>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {producto.lista1 !== undefined
                       ? `${Number(producto.lista1).toLocaleString()}`

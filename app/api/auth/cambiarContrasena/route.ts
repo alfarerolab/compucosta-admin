@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
-const JWT_SECRET = process.env.JWT_SECRET || 'tu-clave-secreta';
+import { getJwtSecret, JWT_ALGORITHM } from '@/lib/jwt-secret';
 
 export async function POST(request: Request) {
     try {
@@ -22,8 +22,17 @@ export async function POST(request: Request) {
         }
         
         // Verificar y decodificar el token
-        const decodedToken = jwt.verify(token, JWT_SECRET) as { userId: string, username: string, role: string };
-        console.log('🔍 Token decodificado:', decodedToken.username);
+        let decodedToken: { id?: number | string; userId?: number | string; role?: string };
+        try {
+            decodedToken = jwt.verify(token, getJwtSecret(), { algorithms: [JWT_ALGORITHM] }) as typeof decodedToken;
+        } catch {
+            return NextResponse.json({ error: 'Sesión inválida o expirada' }, { status: 401 });
+        }
+        // El login firma `id`; se acepta `userId` por compatibilidad con tokens antiguos
+        const adminId = Number(decodedToken.id ?? decodedToken.userId);
+        if (!Number.isInteger(adminId)) {
+            return NextResponse.json({ error: 'Sesión inválida' }, { status: 401 });
+        }
         
         // Obtener datos del cuerpo de la solicitud
         const body = await request.json();
@@ -31,7 +40,7 @@ export async function POST(request: Request) {
         
         const { currentPassword, newPassword } = body;
         
-        if (!currentPassword || !newPassword) {
+        if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' || !currentPassword || !newPassword) {
             console.log('❌ Faltan campos requeridos');
             return NextResponse.json(
                 { error: 'La contraseña actual y la nueva son requeridas' },
@@ -41,7 +50,7 @@ export async function POST(request: Request) {
         
         // Buscar al usuario en la base de datos
         const user = await prisma.admin.findUnique({
-            where: { id: parseInt(decodedToken.userId) }
+            where: { id: adminId }
         });
         
         if (!user) {
@@ -63,6 +72,14 @@ export async function POST(request: Request) {
             );
         }
         
+        // Mismas reglas que el formulario (mínimo 6) y tope por el límite de 72 bytes de bcrypt
+        if (newPassword.length < 6 || newPassword.length > 72) {
+            return NextResponse.json(
+                { error: 'La nueva contraseña debe tener entre 6 y 72 caracteres' },
+                { status: 400 }
+            );
+        }
+
         // Hashear la nueva contraseña
         const hashedNewPassword = await bcrypt.hash(newPassword, 10);
         
